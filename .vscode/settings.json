@@ -1,0 +1,8 @@
+{
+  "editor.rulers": [],
+  "editor.guides.indentation": false,
+  "editor.guides.highlightActiveIndentation": false,
+  "editor.guides.bracketPairs": false,
+  "editor.renderLineHighlight": "none",
+  "java.compile.nullAnalysis.mode": "automatic"
+}
