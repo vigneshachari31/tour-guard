@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'dashboard_screen.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -25,14 +26,20 @@ class _LoginScreenState extends State<LoginScreen> {
     final isValid =
         _emailController.text.trim() == 'viggy@gmail.com' &&
         _passwordController.text == '12345678';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          isValid ? 'Login successful!' : 'Invalid email or password',
+
+    if (isValid) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const DashboardScreen()),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Invalid email or password'),
+          backgroundColor: Colors.red,
         ),
-        backgroundColor: isValid ? Colors.green : Colors.red,
-      ),
-    );
+      );
+    }
   }
 
   @override
@@ -72,9 +79,18 @@ class _LoginScreenState extends State<LoginScreen> {
                             reverseTransitionDuration: const Duration(
                               milliseconds: 100,
                             ),
-                            pageBuilder: (_, __, ___) => const RegisterScreen(),
-                            transitionsBuilder: (_, animation, __, child) =>
-                                FadeTransition(
+                            pageBuilder: (
+                              context,
+                              animation,
+                              secondaryAnimation,
+                            ) => const RegisterScreen(),
+                            transitionsBuilder:
+                                (
+                                  context,
+                                  animation,
+                                  secondaryAnimation,
+                                  child,
+                                ) => FadeTransition(
                                   opacity: CurvedAnimation(
                                     parent: animation,
                                     curve: Curves.easeInOut,

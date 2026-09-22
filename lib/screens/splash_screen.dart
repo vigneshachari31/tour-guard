@@ -37,14 +37,16 @@ class _SplashScreenState extends State<SplashScreen>
 
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
-          pageBuilder: (_, __, ___) => const LoginScreen(),
-          transitionsBuilder: (_, animation, __, child) => FadeTransition(
-            opacity: CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeInOut,
-            ),
-            child: child,
-          ),
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              const LoginScreen(),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+              FadeTransition(
+                opacity: CurvedAnimation(
+                  parent: animation,
+                  curve: Curves.easeInOut,
+                ),
+                child: child,
+              ),
           transitionDuration: const Duration(milliseconds: 1200),
         ),
       );
