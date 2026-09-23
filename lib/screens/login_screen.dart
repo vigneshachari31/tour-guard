@@ -50,54 +50,43 @@ class _LoginScreenState extends State<LoginScreen> {
         Positioned.fill(child: CustomPaint(painter: _MountainPainter())),
         SafeArea(
           child: Center(
-            child: FittedBox(
-              fit: BoxFit.contain,
-              child: SizedBox(
-                width: 400,
-                height: 930,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const SizedBox(height: 18),
                     const _BrandHeader(),
-                    const SizedBox(height: 26),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: _LoginCard(
-                        emailController: _emailController,
-                        passwordController: _passwordController,
-                        obscurePassword: _obscurePassword,
-                        onTogglePassword: () => setState(
-                          () => _obscurePassword = !_obscurePassword,
-                        ),
-                        onLogin: _login,
-                        onCreateAccount: () => Navigator.push(
-                          context,
-                          PageRouteBuilder(
-                            transitionDuration: const Duration(
-                              milliseconds: 400,
-                            ),
-                            reverseTransitionDuration: const Duration(
-                              milliseconds: 100,
-                            ),
-                            pageBuilder: (
-                              context,
-                              animation,
-                              secondaryAnimation,
-                            ) => const RegisterScreen(),
-                            transitionsBuilder:
-                                (
-                                  context,
-                                  animation,
-                                  secondaryAnimation,
-                                  child,
-                                ) => FadeTransition(
-                                  opacity: CurvedAnimation(
-                                    parent: animation,
-                                    curve: Curves.easeInOut,
-                                  ),
-                                  child: child,
-                                ),
+                    const SizedBox(height: 24),
+                    _LoginCard(
+                      emailController: _emailController,
+                      passwordController: _passwordController,
+                      obscurePassword: _obscurePassword,
+                      onTogglePassword: () =>
+                          setState(() => _obscurePassword = !_obscurePassword),
+                      onLogin: _login,
+                      onCreateAccount: () => Navigator.push(
+                        context,
+                        PageRouteBuilder(
+                          transitionDuration: const Duration(milliseconds: 400),
+                          reverseTransitionDuration: const Duration(
+                            milliseconds: 300,
                           ),
+                          pageBuilder: (
+                            context,
+                            animation,
+                            secondaryAnimation,
+                          ) => const RegisterScreen(),
+                          transitionsBuilder:
+                              (context, animation, secondaryAnimation, child) =>
+                                  FadeTransition(
+                                    opacity: CurvedAnimation(
+                                      parent: animation,
+                                      curve: Curves.easeInOut,
+                                    ),
+                                    child: child,
+                                  ),
                         ),
                       ),
                     ),
@@ -239,8 +228,9 @@ class _LoginCard extends StatelessWidget {
         const SizedBox(height: 29),
         const _SocialSection(),
         const SizedBox(height: 23),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        Wrap(
+          alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             const Text(
               'New here? ',
@@ -251,6 +241,7 @@ class _LoginCard extends StatelessWidget {
               style: TextButton.styleFrom(
                 padding: EdgeInsets.zero,
                 minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
               child: const Text(
                 'Create an account',

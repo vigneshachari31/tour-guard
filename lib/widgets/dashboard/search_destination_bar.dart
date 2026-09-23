@@ -8,12 +8,14 @@ class SearchDestinationBar extends StatelessWidget {
   final TextEditingController? controller;
   final ValueChanged<String>? onSubmitted;
   final VoidCallback? onGpsTap;
+  final ValueChanged<String>? onChipTap;
 
   const SearchDestinationBar({
     super.key,
     this.controller,
     this.onSubmitted,
     this.onGpsTap,
+    this.onChipTap,
   });
 
   @override
@@ -83,11 +85,23 @@ class SearchDestinationBar extends StatelessWidget {
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: const [
-            _QuickChip(label: '🌲 Ooty Lake'),
-            _QuickChip(label: '⛰️ Doddabetta Peak'),
-            _QuickChip(label: '🌊 Pykara Falls'),
-            _QuickChip(label: '🍵 Tea Gardens'),
+          children: [
+            _QuickChip(
+              label: '🌲 Ooty Lake',
+              onTap: () => onChipTap?.call('Ooty Lake'),
+            ),
+            _QuickChip(
+              label: '⛰️ Doddabetta Peak',
+              onTap: () => onChipTap?.call('Doddabetta Peak'),
+            ),
+            _QuickChip(
+              label: '🌊 Pykara Falls',
+              onTap: () => onChipTap?.call('Pykara Falls'),
+            ),
+            _QuickChip(
+              label: '🍵 Tea Gardens',
+              onTap: () => onChipTap?.call('Tea Gardens Ooty'),
+            ),
           ],
         ),
       ],
@@ -98,15 +112,14 @@ class SearchDestinationBar extends StatelessWidget {
 // ─── Quick Chip Helper Widget ────────────────────────────────────────────────
 class _QuickChip extends StatelessWidget {
   final String label;
+  final VoidCallback onTap;
 
-  const _QuickChip({required this.label});
+  const _QuickChip({required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: () {
-        // TODO: Auto-populate search field with this destination
-      },
+      onTap: onTap,
       borderRadius: BorderRadius.circular(20),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

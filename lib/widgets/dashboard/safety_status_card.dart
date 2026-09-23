@@ -44,10 +44,7 @@ class SafetyStatusCard extends StatelessWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: const Color(0xFFE8F8EE),
                   borderRadius: BorderRadius.circular(30),
@@ -96,21 +93,13 @@ class SafetyStatusCard extends StatelessWidget {
                 ),
               ),
               SizedBox(width: 8),
-              Icon(
-                Icons.check_circle_rounded,
-                color: Color(0xFF1EAA55),
-                size: 24,
-              ),
+              Icon(Icons.check_circle_rounded, color: Color(0xFF1EAA55), size: 24),
             ],
           ),
           const SizedBox(height: 6),
           const Text(
             'No active landslide, flood, or roadblock threats detected nearby.',
-            style: TextStyle(
-              fontSize: 14,
-              color: Color(0xFF53647F),
-              height: 1.4,
-            ),
+            style: TextStyle(fontSize: 14, color: Color(0xFF53647F), height: 1.4),
           ),
 
           const SizedBox(height: 18),
@@ -183,3 +172,4 @@ class _StatItem extends StatelessWidget {
     );
   }
 }
+

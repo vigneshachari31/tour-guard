@@ -5,6 +5,7 @@ import '../widgets/dashboard/safety_services_grid.dart';
 import '../widgets/dashboard/safety_status_card.dart';
 import '../widgets/dashboard/search_destination_bar.dart';
 import '../widgets/dashboard/smart_rescue_card.dart';
+import 'map_screen.dart';
 
 // ==============================================================================
 // 📱 MAIN DASHBOARD SCREEN (TOUR GUARD)
@@ -21,36 +22,73 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Current active tab index in the Bottom Navigation Bar
   int _currentTabIndex = 0;
 
+  // Navigation helper to open the interactive map & routing screen
+  void _navigateToMap([String? destination]) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MapScreen(initialDestination: destination),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F9FC), // Modern off-white / slate
       // Main Scrollable Body
-      body: const SafeArea(
+      body: SafeArea(
         child: SingleChildScrollView(
-          padding: EdgeInsets.all(20),
+          padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // 1. App Title & Notifications Header
-              DashboardHeader(),
-              SizedBox(height: 25),
+              const DashboardHeader(),
+              const SizedBox(height: 25),
 
               // 2. AI Safety Status & Live Environmental Card
-              SafetyStatusCard(),
-              SizedBox(height: 26),
+              const SafetyStatusCard(),
+              const SizedBox(height: 26),
 
               // 3. Destination Search Bar & Quick Suggestion Chips
-              SearchDestinationBar(),
-              SizedBox(height: 28),
+              SearchDestinationBar(
+                onSubmitted: (query) => _navigateToMap(query),
+                onChipTap: (destination) => _navigateToMap(destination),
+                onGpsTap: () => _navigateToMap(),
+              ),
+              const SizedBox(height: 28),
 
               // 4. 2x2 Core Safety Services Grid (AI Radar, Route, Sharing, Reports)
-              SafetyServicesGrid(),
-              SizedBox(height: 28),
+              SafetyServicesGrid(
+                onRiskRadarTap: () => _navigateToMap(),
+                onSafeRouteTap: () => _navigateToMap(),
+                onLiveSharingTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Live GPS tracking link copied to clipboard!',
+                      ),
+                      backgroundColor: Color(0xFF8B5CF6),
+                    ),
+                  );
+                },
+                onReportHazardTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Report Hazard: PostGIS layer sync in progress',
+                      ),
+                      backgroundColor: Color(0xFFFF9800),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 28),
 
               // 5. Emergency SOS Beacon & Official Helplines (112, 1077)
-              SmartRescueCard(),
-              SizedBox(height: 20),
+              const SmartRescueCard(),
+              const SizedBox(height: 20),
             ],
           ),
         ),
@@ -73,6 +111,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             setState(() {
               _currentTabIndex = index;
             });
+            if (index == 1) {
+              // Switch to Safe Route tab
+              _navigateToMap();
+            }
           },
           backgroundColor: Colors.white,
           indicatorColor: const Color(0xFFE8F3FF),

@@ -23,10 +23,7 @@ class SmartRescueCard extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [
-            Color(0xFFDC2626),
-            Color(0xFF991B1B),
-          ], // Deep Emergency Crimson
+          colors: [Color(0xFFDC2626), Color(0xFF991B1B)], // Deep Emergency Crimson
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -62,20 +59,14 @@ class SmartRescueCard extends StatelessWidget {
                 ],
               ),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: const Row(
                   children: [
-                    CircleAvatar(
-                      radius: 3.5,
-                      backgroundColor: Colors.greenAccent,
-                    ),
+                    CircleAvatar(radius: 3.5, backgroundColor: Colors.greenAccent),
                     SizedBox(width: 5),
                     Text(
                       'GPS Active',
@@ -106,24 +97,17 @@ class SmartRescueCard extends StatelessWidget {
             width: double.infinity,
             height: 52,
             child: ElevatedButton.icon(
-              onPressed:
-                  onTriggerSos ??
+              onPressed: onTriggerSos ??
                   () {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                        content: Text(
-                          '🚨 SOS Alert Dispatched to Rescue Command Center!',
-                        ),
+                        content: Text('🚨 SOS Alert Dispatched to Rescue Command Center!'),
                         backgroundColor: Color(0xFFDC2626),
                         duration: Duration(seconds: 4),
                       ),
                     );
                   },
-              icon: const Icon(
-                Icons.sos_rounded,
-                size: 28,
-                color: Color(0xFFDC2626),
-              ),
+              icon: const Icon(Icons.sos_rounded, size: 28, color: Color(0xFFDC2626)),
               label: const Text(
                 'TRIGGER EMERGENCY SOS',
                 style: TextStyle(
@@ -151,35 +135,19 @@ class SmartRescueCard extends StatelessWidget {
             children: [
               TextButton.icon(
                 onPressed: onPoliceDial ?? () {},
-                icon: const Icon(
-                  Icons.phone_in_talk_rounded,
-                  size: 16,
-                  color: Colors.white70,
-                ),
+                icon: const Icon(Icons.phone_in_talk_rounded, size: 16, color: Colors.white70),
                 label: const Text(
                   'Police: 112',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
                 ),
               ),
               const Text('•', style: TextStyle(color: Colors.white54)),
               TextButton.icon(
                 onPressed: onDisasterDial ?? () {},
-                icon: const Icon(
-                  Icons.support_agent_rounded,
-                  size: 16,
-                  color: Colors.white70,
-                ),
+                icon: const Icon(Icons.support_agent_rounded, size: 16, color: Colors.white70),
                 label: const Text(
                   'Disaster Helpline: 1077',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
                 ),
               ),
             ],
@@ -189,3 +157,4 @@ class SmartRescueCard extends StatelessWidget {
     );
   }
 }
+
