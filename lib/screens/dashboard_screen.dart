@@ -39,17 +39,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // Main Scrollable Body
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // 1. App Title & Notifications Header
               const DashboardHeader(),
-              const SizedBox(height: 25),
+              const SizedBox(height: 16),
 
-              // 2. AI Safety Status & Live Environmental Card
+              // 2. AI Safety Status & Live Environmental Card (Compact)
               const SafetyStatusCard(),
-              const SizedBox(height: 26),
+              const SizedBox(height: 18),
 
               // 3. Destination Search Bar & Quick Suggestion Chips
               SearchDestinationBar(
@@ -57,7 +57,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 onChipTap: (destination) => _navigateToMap(destination),
                 onGpsTap: () => _navigateToMap(),
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 20),
 
               // 4. 2x2 Core Safety Services Grid (AI Radar, Route, Sharing, Reports)
               SafetyServicesGrid(
@@ -84,11 +84,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   );
                 },
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 20),
 
               // 5. Emergency SOS Beacon & Official Helplines (112, 1077)
               const SmartRescueCard(),
-              const SizedBox(height: 20),
+              const SizedBox(height: 14),
             ],
           ),
         ),
