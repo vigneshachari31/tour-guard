@@ -55,7 +55,7 @@ class RoutingService {
     // Attempt 1: Fast Photon API (No 429 rate limit)
     try {
       final uri = Uri.parse(
-        'https://photon.komoot.io/api/?q=${Uri.encodeComponent(cleanQuery)}&limit=6',
+        'https://photon.komoot.io/api/?q=${Uri.encodeComponent(cleanQuery)}&limit=10',
       );
       final response = await http.get(uri).timeout(const Duration(seconds: 4));
 
@@ -73,25 +73,31 @@ class RoutingService {
             final coords = geom['coordinates'] as List<dynamic>?;
             if (coords == null || coords.length < 2) continue;
 
-            final double lng = (coords[0] as num).toDouble();
             final double lat = (coords[1] as num).toDouble();
+            final double lng = (coords[0] as num).toDouble();
 
-            final name = props['name'] as String? ?? '';
-            final city =
-                props['city'] ??
-                props['town'] ??
-                props['district'] ??
-                props['county'];
-            final state = props['state'] as String?;
-            final country = props['country'] as String?;
-
-            final List<String> parts = [];
-            if (name.isNotEmpty) parts.add(name);
-            if (city != null && city.toString().isNotEmpty && city != name) {
-              parts.add(city.toString());
+            final parts = <String>[];
+            for (final key in [
+              'name',
+              'street',
+              'locality',
+              'district',
+              'city',
+              'town',
+              'village',
+              'county',
+              'state',
+              'country',
+            ]) {
+              final value = props[key]?.toString().trim();
+              if (value != null &&
+                  value.isNotEmpty &&
+                  !parts.any(
+                    (part) => part.toLowerCase() == value.toLowerCase(),
+                  )) {
+                parts.add(value);
+              }
             }
-            if (state != null && state.isNotEmpty) parts.add(state);
-            if (country != null && country.isNotEmpty) parts.add(country);
 
             final display = parts.isNotEmpty
                 ? parts.join(', ')

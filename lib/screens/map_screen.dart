@@ -48,6 +48,7 @@ class _MapScreenState extends State<MapScreen> {
   // Real-time GPS Stream & Debounce Timers
   StreamSubscription<Position>? _positionStreamSubscription;
   Timer? _debounceTimer;
+  int _searchRequestId = 0;
 
   // Route details
   List<LatLng> _routePoints = [];
@@ -319,6 +320,7 @@ class _MapScreenState extends State<MapScreen> {
   void _onSourceTextChanged(String query) {
     _isFocusedOnSource = true;
     _debounceTimer?.cancel();
+    final requestId = ++_searchRequestId;
 
     if (query.trim().isEmpty || query.contains('📍')) {
       setState(() {
@@ -332,7 +334,7 @@ class _MapScreenState extends State<MapScreen> {
 
     _debounceTimer = Timer(const Duration(milliseconds: 300), () async {
       final results = await RoutingService.searchDestination(query);
-      if (mounted) {
+      if (mounted && requestId == _searchRequestId) {
         setState(() {
           _sourceSuggestions = results;
           _isSearching = false;
@@ -345,6 +347,7 @@ class _MapScreenState extends State<MapScreen> {
   void _onDestinationTextChanged(String query) {
     _isFocusedOnSource = false;
     _debounceTimer?.cancel();
+    final requestId = ++_searchRequestId;
 
     if (query.trim().isEmpty) {
       setState(() {
@@ -358,7 +361,7 @@ class _MapScreenState extends State<MapScreen> {
 
     _debounceTimer = Timer(const Duration(milliseconds: 300), () async {
       final results = await RoutingService.searchDestination(query);
-      if (mounted) {
+      if (mounted && requestId == _searchRequestId) {
         setState(() {
           _destinationSuggestions = results;
           _isSearching = false;
@@ -370,6 +373,8 @@ class _MapScreenState extends State<MapScreen> {
   Future<void> _searchAndSetDestination(String query) async {
     if (query.trim().isEmpty) return;
 
+    _debounceTimer?.cancel();
+    final requestId = ++_searchRequestId;
     setState(() {
       _isSearching = true;
       _destinationSuggestions = [];
@@ -377,7 +382,7 @@ class _MapScreenState extends State<MapScreen> {
 
     final results = await RoutingService.searchDestination(query);
 
-    if (mounted) {
+    if (mounted && requestId == _searchRequestId) {
       setState(() => _isSearching = false);
       if (results.isNotEmpty) {
         _selectDestination(results.first);
@@ -394,7 +399,10 @@ class _MapScreenState extends State<MapScreen> {
 
   // ─── 6. SELECT SOURCE & DESTINATION ─────────────────────────────────────────
   void _selectSource(LocationSearchResult place) {
+    _debounceTimer?.cancel();
+    _searchRequestId++;
     setState(() {
+      _isSearching = false;
       _sourceLocation = place.latLng;
       _sourceName = place.displayName.split(',').first;
       _sourceController.text = _sourceName;
@@ -410,7 +418,10 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _selectDestination(LocationSearchResult place) {
+    _debounceTimer?.cancel();
+    _searchRequestId++;
     setState(() {
+      _isSearching = false;
       _destinationLocation = place.latLng;
       _destinationName = place.displayName.split(',').first;
       _destinationController.text = place.displayName;
@@ -849,7 +860,7 @@ class _MapScreenState extends State<MapScreen> {
                                   _searchAndSetDestination(value);
                                 },
                                 decoration: const InputDecoration(
-                                  hintText: 'Enter destination (e.g. Coimbatore, Ooty)...',
+                                  hintText: 'Enter destination',
                                   hintStyle: TextStyle(
                                     color: Color(0xFF8A99AF),
                                     fontSize: 13,
@@ -959,47 +970,6 @@ class _MapScreenState extends State<MapScreen> {
                         },
                       ),
                     ),
-
-                  // Quick Suggestion Chips below search bar
-                  const SizedBox(height: 8),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        _QuickSearchPill(
-                          label: '🌊 Pykara Lake',
-                          onTap: () {
-                            _destinationController.text = 'Pykara Lake';
-                            _searchAndSetDestination('Pykara Lake');
-                          },
-                        ),
-                        const SizedBox(width: 8),
-                        _QuickSearchPill(
-                          label: '⛰️ Doddabetta Peak',
-                          onTap: () {
-                            _destinationController.text = 'Doddabetta Peak';
-                            _searchAndSetDestination('Doddabetta Peak');
-                          },
-                        ),
-                        const SizedBox(width: 8),
-                        _QuickSearchPill(
-                          label: '🌲 Mudumalai Forest',
-                          onTap: () {
-                            _destinationController.text = 'Mudumalai';
-                            _searchAndSetDestination('Mudumalai');
-                          },
-                        ),
-                        const SizedBox(width: 8),
-                        _QuickSearchPill(
-                          label: '🏙️ Coimbatore',
-                          onTap: () {
-                            _destinationController.text = 'Coimbatore';
-                            _searchAndSetDestination('Coimbatore');
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -1142,45 +1112,6 @@ class _DemoPresetTile extends StatelessWidget {
           Icons.arrow_forward_ios_rounded,
           size: 14,
           color: Color(0xFF087CF0),
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Quick Destination Search Pill Widget ────────────────────────────────────
-class _QuickSearchPill extends StatelessWidget {
-  final String label;
-  final VoidCallback onTap;
-
-  const _QuickSearchPill({required this.label, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.92),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x0A000000),
-              blurRadius: 6,
-              offset: Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF1A2D4F),
-          ),
         ),
       ),
     );

@@ -51,10 +51,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SafetyStatusCard(),
               const SizedBox(height: 18),
 
-              // 3. Destination Search Bar & Quick Suggestion Chips
+              // 3. Destination Search Bar
               SearchDestinationBar(
                 onSubmitted: (query) => _navigateToMap(query),
-                onChipTap: (destination) => _navigateToMap(destination),
                 onGpsTap: () => _navigateToMap(),
               ),
               const SizedBox(height: 20),
