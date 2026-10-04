@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
+import 'profile_screen.dart';
 import '../widgets/dashboard/dashboard_header.dart';
 import '../widgets/dashboard/safety_services_grid.dart';
 import '../widgets/dashboard/safety_status_card.dart';
 import '../widgets/dashboard/search_destination_bar.dart';
 import '../widgets/dashboard/smart_rescue_card.dart';
 import 'map_screen.dart';
+import 'sos_screen.dart';
 
 // ==============================================================================
 // 📱 MAIN DASHBOARD SCREEN (TOUR GUARD)
@@ -32,17 +34,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  // Navigation helper to open the Emergency SOS & Smart Rescue screen
+  void _navigateToSos() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const SosScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F9FC), // Modern off-white / slate
       // Main Scrollable Body
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+      body: _currentTabIndex == 4
+          ? const ProfileScreen()
+          : SafeArea(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 16,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
               // 1. App Title & Notifications Header
               const DashboardHeader(),
               const SizedBox(height: 16),
@@ -86,12 +101,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 20),
 
               // 5. Emergency SOS Beacon & Official Helplines (112, 1077)
-              const SmartRescueCard(),
-              const SizedBox(height: 14),
-            ],
-          ),
-        ),
-      ),
+              SmartRescueCard(onTriggerSos: _navigateToSos),
+                    const SizedBox(height: 14),
+                  ],
+                ),
+              ),
+            ),
 
       // 6. Bottom Navigation Bar (Home, Safe Route, SOS, Alerts, Profile)
       bottomNavigationBar: Container(
@@ -111,8 +126,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _currentTabIndex = index;
             });
             if (index == 1) {
-              // Switch to Safe Route tab
               _navigateToMap();
+            } else if (index == 2) {
+              _navigateToSos();
             }
           },
           backgroundColor: Colors.white,

@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/map_screen.dart';
+import 'screens/profile_screen.dart';
 import 'screens/register_screen.dart';
+import 'screens/sos_screen.dart';
 import 'screens/splash_screen.dart';
 
 // ==============================================================================
@@ -39,6 +41,8 @@ class TravelRiskApp extends StatelessWidget {
         '/register': (context) => const RegisterScreen(),
         '/dashboard': (context) => const DashboardScreen(),
         '/map': (context) => const MapScreen(),
+        '/profile': (context) => const ProfileScreen(),
+        '/sos': (context) => const SosScreen(),
       },
     );
   }

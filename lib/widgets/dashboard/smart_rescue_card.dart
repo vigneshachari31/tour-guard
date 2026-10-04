@@ -95,7 +95,7 @@ class SmartRescueCard extends StatelessWidget {
 
           // Description
           const Text(
-            'In distress? Tap below to broadcast your live GPS and hazard situation directly to the nearest Rescue Authority.',
+            'In distress? The SOS demo logs your GPS to the app backend; it does not contact rescue services. Call an emergency number directly for real help.',
             style: TextStyle(color: Colors.white, fontSize: 12, height: 1.35),
           ),
 

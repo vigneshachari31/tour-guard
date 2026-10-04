@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 
 // ==============================================================================
 // 🛡️ COMPACT SAFETY STATUS CARD WIDGET
-// Sleek, compact overview displaying the AI Risk Score, Safe Zone verdict,
-// and responsive environmental metrics with zero RenderFlex overflow.
+// Dashboard entry point for route-based risk estimates from the backend.
 // ==============================================================================
 class SafetyStatusCard extends StatelessWidget {
   const SafetyStatusCard({super.key});
@@ -29,7 +28,7 @@ class SafetyStatusCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // ─── Top Row: Safe Zone Badge + AI Risk Pill ────────────────────────
+          // ─── Top Row: Route Risk Status ────────────────────────────────────
           Row(
             children: [
               // Left: Shield Icon + Safe Zone Text
@@ -39,13 +38,13 @@ class SafetyStatusCard extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(7),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFE8F8EE),
+                        color: const Color(0xFFE8F3FF),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: const Icon(
                         Icons.shield_rounded,
                         size: 20,
-                        color: Color(0xFF1EAA55),
+                        color: Color(0xFF087CF0),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -54,7 +53,7 @@ class SafetyStatusCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'CURRENT STATUS',
+                            'ROUTE SAFETY',
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
@@ -66,19 +65,13 @@ class SafetyStatusCard extends StatelessWidget {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                'SAFE ZONE',
+                                'PLAN A ROUTE',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w800,
-                                  color: Color(0xFF1EAA55),
+                                  color: Color(0xFF087CF0),
                                   letterSpacing: 0.2,
                                 ),
-                              ),
-                              SizedBox(width: 4),
-                              Icon(
-                                Icons.check_circle_rounded,
-                                color: Color(0xFF1EAA55),
-                                size: 16,
                               ),
                             ],
                           ),
@@ -98,24 +91,24 @@ class SafetyStatusCard extends StatelessWidget {
                   vertical: 5,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE8F8EE),
+                  color: const Color(0xFFE8F3FF),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFFC3EED3)),
+                  border: Border.all(color: const Color(0xFFC7E2FF)),
                 ),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     CircleAvatar(
                       radius: 3.5,
-                      backgroundColor: Color(0xFF1EAA55),
+                      backgroundColor: Color(0xFF087CF0),
                     ),
                     SizedBox(width: 5),
                     Text(
-                      'AI Risk: 12%',
+                      'Risk on route',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
-                        color: Color(0xFF1EAA55),
+                        color: Color(0xFF087CF0),
                       ),
                     ),
                   ],
@@ -128,7 +121,7 @@ class SafetyStatusCard extends StatelessWidget {
 
           // ─── One-line status description ───────────────────────────────────
           const Text(
-            'No active landslide, flood, or roadblock alerts in your area.',
+            'Choose a destination to request a prototype risk estimate and nearby hazard reports.',
             style: TextStyle(
               fontSize: 12,
               color: Color(0xFF53647F),
@@ -142,86 +135,15 @@ class SafetyStatusCard extends StatelessWidget {
           const Divider(height: 1, color: Color(0xFFF1F5F9)),
           const SizedBox(height: 10),
 
-          // ─── Responsive Environmental Stats Row ────────────────────────────
-          const Row(
-            children: [
-              Expanded(
-                child: _CompactStatItem(
-                  icon: Icons.wb_sunny_outlined,
-                  label: 'Weather',
-                  value: '21°C',
-                ),
-              ),
-              SizedBox(width: 8),
-              Expanded(
-                child: _CompactStatItem(
-                  icon: Icons.terrain_outlined,
-                  label: 'Slope',
-                  value: 'Stable',
-                ),
-              ),
-              SizedBox(width: 8),
-              Expanded(
-                child: _CompactStatItem(
-                  icon: Icons.water_drop_outlined,
-                  label: 'Rainfall',
-                  value: '0.2 mm',
-                ),
-              ),
-            ],
+          const Text(
+            'Live weather and verified hazard feeds are not connected.',
+            style: TextStyle(
+              fontSize: 11,
+              color: Color(0xFF8A99AF),
+              height: 1.25,
+            ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ─── Compact Stat Item Widget (Scales down gracefully without overflow) ───────
-class _CompactStatItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-
-  const _CompactStatItem({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFEDF2F7)),
-      ),
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 14, color: const Color(0xFF087CF0)),
-            const SizedBox(width: 4),
-            Text(
-              '$label: ',
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF8A99AF),
-              ),
-            ),
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF1A2D4F),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

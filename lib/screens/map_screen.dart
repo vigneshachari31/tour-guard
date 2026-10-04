@@ -6,6 +6,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../services/backend_service.dart';
 import '../services/routing_service.dart';
 
 // ==============================================================================
@@ -54,6 +55,17 @@ class _MapScreenState extends State<MapScreen> {
   List<LatLng> _routePoints = [];
   double _routeDistanceKm = 0.0;
   double _routeDurationMin = 0.0;
+  RiskResult? _routeRisk;
+  String? _riskError;
+  bool _isLoadingRisk = false;
+
+  // Hazards from Backend
+  List<Hazard> _nearbyHazards = [];
+  String? _hazardError;
+  bool _isLoadingHazards = false;
+  double? _userElevationMeters;
+  int _assessmentRequestId = 0;
+  int _routeRequestId = 0;
 
   // Loading & State flags
   bool _isLoadingGps = true;
@@ -215,6 +227,9 @@ class _MapScreenState extends State<MapScreen> {
       setState(() {
         _userGpsLocation = finalCoords;
         _sourceLocation = finalCoords;
+        _userElevationMeters = position.altitude >= 0
+            ? position.altitude
+            : null;
         _isLoadingGps = false;
       });
 
@@ -462,11 +477,12 @@ class _MapScreenState extends State<MapScreen> {
 
     if (end == null) return;
 
+    final requestId = ++_routeRequestId;
     setState(() => _isCalculatingRoute = true);
 
     final routeData = await RoutingService.getDrivingRoute(start, end);
 
-    if (mounted) {
+    if (mounted && requestId == _routeRequestId) {
       setState(() {
         _isCalculatingRoute = false;
         if (routeData != null) {
@@ -481,6 +497,72 @@ class _MapScreenState extends State<MapScreen> {
       });
 
       _fitRouteBounds();
+      _loadRouteAssessments(end);
+    }
+  }
+
+  void _loadRouteAssessments(LatLng destination) {
+    final requestId = ++_assessmentRequestId;
+    setState(() {
+      _isLoadingRisk = true;
+      _isLoadingHazards = true;
+      _riskError = null;
+      _hazardError = null;
+      _routeRisk = null;
+      _nearbyHazards = [];
+    });
+    unawaited(_loadRouteRisk(destination, requestId));
+    unawaited(_loadNearbyHazards(destination, requestId));
+  }
+
+  Future<void> _loadRouteRisk(LatLng destination, int requestId) async {
+    try {
+      final result = await BackendService.predictRisk(
+        // The backend currently has no live weather/terrain feed; these are
+        // sample inputs, not observed conditions.
+        rainfallMmH: 0,
+        slopeDegrees: 0,
+        elevationM: _userElevationMeters ?? 0,
+        windKmh: 0,
+        visibilityKm: 8,
+        touristDensity: 0.3,
+        latitude: destination.latitude,
+        longitude: destination.longitude,
+      );
+      if (!mounted || requestId != _assessmentRequestId) return;
+      setState(() {
+        _routeRisk = result;
+        _isLoadingRisk = false;
+      });
+    } catch (error) {
+      debugPrint('Route risk request failed: $error');
+      if (!mounted || requestId != _assessmentRequestId) return;
+      setState(() {
+        _riskError = 'Risk service unavailable. Check the backend connection.';
+        _isLoadingRisk = false;
+      });
+    }
+  }
+
+  Future<void> _loadNearbyHazards(LatLng destination, int requestId) async {
+    try {
+      final hazards = await BackendService.getNearbyHazards(
+        lat: destination.latitude,
+        lon: destination.longitude,
+      );
+      if (!mounted || requestId != _assessmentRequestId) return;
+      setState(() {
+        _nearbyHazards = hazards;
+        _isLoadingHazards = false;
+      });
+    } catch (error) {
+      debugPrint('Nearby hazards request failed: $error');
+      if (!mounted || requestId != _assessmentRequestId) return;
+      setState(() {
+        _hazardError =
+            'Hazard reports unavailable. Check the backend connection.';
+        _isLoadingHazards = false;
+      });
     }
   }
 
@@ -728,6 +810,23 @@ class _MapScreenState extends State<MapScreen> {
                             ),
                           ),
                         ],
+                      ),
+                    ),
+                  if (_showHazardOverlay)
+                    ..._nearbyHazards.map(
+                      (hazard) => Marker(
+                        point: LatLng(hazard.lat, hazard.lon),
+                        width: 36,
+                        height: 36,
+                        child: Tooltip(
+                          message:
+                              '${hazard.severity.toUpperCase()}: ${hazard.title}',
+                          child: Icon(
+                            Icons.warning_rounded,
+                            color: _hazardColor(hazard.severity),
+                            size: 30,
+                          ),
+                        ),
                       ),
                     ),
                 ],
@@ -1055,6 +1154,12 @@ class _MapScreenState extends State<MapScreen> {
                 destinationName: _destinationName ?? 'Destination',
                 distanceKm: _routeDistanceKm,
                 durationMin: _routeDurationMin,
+                risk: _routeRisk,
+                riskError: _riskError,
+                isLoadingRisk: _isLoadingRisk,
+                hazards: _nearbyHazards,
+                hazardError: _hazardError,
+                isLoadingHazards: _isLoadingHazards,
                 onStartTrip: () {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
@@ -1070,6 +1175,19 @@ class _MapScreenState extends State<MapScreen> {
         ],
       ),
     );
+  }
+}
+
+Color _hazardColor(String severity) {
+  switch (severity.toLowerCase()) {
+    case 'critical':
+      return const Color(0xFF7C3AED);
+    case 'high':
+      return const Color(0xFFDC2626);
+    case 'medium':
+      return const Color(0xFFF97316);
+    default:
+      return const Color(0xFFEAB308);
   }
 }
 
@@ -1124,6 +1242,12 @@ class _RouteRiskSummaryCard extends StatelessWidget {
   final String destinationName;
   final double distanceKm;
   final double durationMin;
+  final RiskResult? risk;
+  final String? riskError;
+  final bool isLoadingRisk;
+  final List<Hazard> hazards;
+  final String? hazardError;
+  final bool isLoadingHazards;
   final VoidCallback onStartTrip;
 
   const _RouteRiskSummaryCard({
@@ -1131,6 +1255,12 @@ class _RouteRiskSummaryCard extends StatelessWidget {
     required this.destinationName,
     required this.distanceKm,
     required this.durationMin,
+    required this.risk,
+    required this.riskError,
+    required this.isLoadingRisk,
+    required this.hazards,
+    required this.hazardError,
+    required this.isLoadingHazards,
     required this.onStartTrip,
   });
 
@@ -1214,24 +1344,42 @@ class _RouteRiskSummaryCard extends StatelessWidget {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE8F8EE),
+                  color: risk == null
+                      ? const Color(0xFFF1F5F9)
+                      : _riskColor(risk!.color).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFFA5E6BE)),
+                  border: Border.all(
+                    color: risk == null
+                        ? const Color(0xFFE2E8F0)
+                        : _riskColor(risk!.color).withValues(alpha: 0.35),
+                  ),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(
-                      Icons.shield_rounded,
-                      size: 14,
-                      color: Color(0xFF1EAA55),
-                    ),
-                    SizedBox(width: 4),
+                    if (isLoadingRisk)
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    else
+                      Icon(
+                        Icons.shield_rounded,
+                        size: 14,
+                        color: risk == null
+                            ? const Color(0xFF64748B)
+                            : _riskColor(risk!.color),
+                      ),
+                    const SizedBox(width: 4),
                     Text(
-                      'LOW RISK',
+                      risk?.riskLabel.toUpperCase() ??
+                          (riskError == null ? 'RISK PENDING' : 'UNAVAILABLE'),
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
-                        color: Color(0xFF1EAA55),
+                        color: risk == null
+                            ? const Color(0xFF64748B)
+                            : _riskColor(risk!.color),
                       ),
                     ),
                   ],
@@ -1240,31 +1388,45 @@ class _RouteRiskSummaryCard extends StatelessWidget {
             ],
           ),
 
+          if (risk != null || riskError != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              risk != null
+                  ? 'Prototype model · sample weather/terrain inputs · score ${risk!.riskScore}/100. ${risk!.advice}'
+                  : riskError ?? 'Risk service unavailable.',
+              style: const TextStyle(
+                fontSize: 11,
+                height: 1.3,
+                color: Color(0xFF64748B),
+              ),
+            ),
+          ],
+
           const SizedBox(height: 14),
           const Divider(height: 1, color: Color(0xFFF1F5F9)),
           const SizedBox(height: 14),
 
-          // Environmental & Hazard Factors along route
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Row(
             children: [
-              _RiskFactorItem(
-                icon: Icons.landslide_rounded,
-                label: 'Landslide',
-                status: 'Stable',
-                isSafe: true,
+              const Icon(
+                Icons.warning_amber_rounded,
+                size: 17,
+                color: Color(0xFFF97316),
               ),
-              _RiskFactorItem(
-                icon: Icons.water_drop_rounded,
-                label: 'Flood/Rain',
-                status: 'Light Rain',
-                isSafe: true,
-              ),
-              _RiskFactorItem(
-                icon: Icons.air_rounded,
-                label: 'Wind Gust',
-                status: '12 km/h',
-                isSafe: true,
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  isLoadingHazards
+                      ? 'Loading nearby hazard reports...'
+                      : hazardError != null
+                      ? hazardError!
+                      : '${hazards.length} nearby hazard report${hazards.length == 1 ? '' : 's'} (demo data)',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF53647F),
+                  ),
+                ),
               ),
             ],
           ),
@@ -1298,54 +1460,8 @@ class _RouteRiskSummaryCard extends StatelessWidget {
   }
 }
 
-// ─── Risk Factor Mini Item ───────────────────────────────────────────────────
-class _RiskFactorItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String status;
-  final bool isSafe;
-
-  const _RiskFactorItem({
-    required this.icon,
-    required this.label,
-    required this.status,
-    required this.isSafe,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(
-          icon,
-          size: 16,
-          color: isSafe ? const Color(0xFF1EAA55) : const Color(0xFFDC2626),
-        ),
-        const SizedBox(width: 6),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 11,
-                color: Color(0xFF8A99AF),
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            Text(
-              status,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: isSafe
-                    ? const Color(0xFF1A2D4F)
-                    : const Color(0xFFDC2626),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
+Color _riskColor(String hexColor) {
+  final normalized = hexColor.replaceFirst('#', '');
+  final value = int.tryParse(normalized, radix: 16);
+  return value == null ? const Color(0xFF64748B) : Color(0xFF000000 | value);
 }
