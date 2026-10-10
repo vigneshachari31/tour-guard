@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'profile_screen.dart';
 import '../widgets/dashboard/dashboard_header.dart';
 import '../widgets/dashboard/safety_services_grid.dart';
-import '../widgets/dashboard/safety_status_card.dart';
+import '../widgets/dashboard/route_risk_card.dart';
+import '../models/route_response.dart';
 import '../widgets/dashboard/search_destination_bar.dart';
 import '../widgets/dashboard/smart_rescue_card.dart';
 import 'map_screen.dart';
@@ -23,13 +24,19 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   // Current active tab index in the Bottom Navigation Bar
   int _currentTabIndex = 0;
+  RouteResponse? _assessment;
 
   // Navigation helper to open the interactive map & routing screen
   void _navigateToMap([String? destination]) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => MapScreen(initialDestination: destination),
+        builder: (context) => MapScreen(
+          initialDestination: destination,
+          onAnalyzed: (result) {
+            if (mounted) setState(() => _assessment = result);
+          },
+        ),
       ),
     );
   }
@@ -58,50 +65,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-              // 1. App Title & Notifications Header
-              const DashboardHeader(),
-              const SizedBox(height: 16),
+                    // 1. App Title & Notifications Header
+                    const DashboardHeader(),
+                    const SizedBox(height: 16),
 
-              // 2. AI Safety Status & Live Environmental Card (Compact)
-              const SafetyStatusCard(),
-              const SizedBox(height: 18),
+                    // 2. AI Safety Status & Live Environmental Card (Compact)
+                    RouteRiskCard(route: _assessment),
+                    const SizedBox(height: 18),
 
-              // 3. Destination Search Bar
-              SearchDestinationBar(
-                onSubmitted: (query) => _navigateToMap(query),
-                onGpsTap: () => _navigateToMap(),
-              ),
-              const SizedBox(height: 20),
-
-              // 4. 2x2 Core Safety Services Grid (AI Radar, Route, Sharing, Reports)
-              SafetyServicesGrid(
-                onRiskRadarTap: () => _navigateToMap(),
-                onSafeRouteTap: () => _navigateToMap(),
-                onLiveSharingTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Live GPS tracking link copied to clipboard!',
-                      ),
-                      backgroundColor: Color(0xFF8B5CF6),
+                    // 3. Destination Search Bar
+                    SearchDestinationBar(
+                      onSubmitted: (query) => _navigateToMap(query),
+                      onGpsTap: () => _navigateToMap(),
                     ),
-                  );
-                },
-                onReportHazardTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Report Hazard: PostGIS layer sync in progress',
-                      ),
-                      backgroundColor: Color(0xFFFF9800),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 20),
+                    const SizedBox(height: 20),
 
-              // 5. Emergency SOS Beacon & Official Helplines (112, 1077)
-              SmartRescueCard(onTriggerSos: _navigateToSos),
+                    // 4. 2x2 Core Safety Services Grid (AI Radar, Route, Sharing, Reports)
+                    SafetyServicesGrid(
+                      onRiskRadarTap: () => _navigateToMap(),
+                      onSafeRouteTap: () => _navigateToMap(),
+                      onLiveSharingTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Live GPS tracking link copied to clipboard!',
+                            ),
+                            backgroundColor: Color(0xFF8B5CF6),
+                          ),
+                        );
+                      },
+                      onReportHazardTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Report Hazard: PostGIS layer sync in progress',
+                            ),
+                            backgroundColor: Color(0xFFFF9800),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 20),
+
+                    // 5. Emergency SOS Beacon & Official Helplines (112, 1077)
+                    SmartRescueCard(onTriggerSos: _navigateToSos),
                     const SizedBox(height: 14),
                   ],
                 ),

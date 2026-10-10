@@ -1,30 +1,35 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
-import '../services/backend_service.dart';
+import '../services/api_service.dart';
+import '../services/current_location.dart';
+import '../models/route_response.dart';
 import '../services/routing_service.dart';
 
 // ==============================================================================
 // 🗺️ MAP & LIVE GPS SAFE ROUTING SCREEN (TOUR GUARD)
 // ------------------------------------------------------------------------------
-// Key Features:
-// 1. Live GPS auto-detection + Smart Emulator SF auto-fallback to Indian Demo Hub.
-// 2. Interactive Map Tap: Tap anywhere on map to set destination & route.
-// 3. Demo Route Presets: 1-Tap realistic hill-station routes for presentations.
-// 4. Dual Input: FROM (Live Location / Custom Source) & TO (Destination).
-// 5. Turn-by-turn Route Pathing via OSRM Polyline with camera auto-fit.
-// 6. Pre-Trip Risk Analysis Overlay (Landslide, Flood & Weather Assessment).
+// Original dual-location planner with optional GPS and authenticated route analysis.
 // ==============================================================================
 
 class MapScreen extends StatefulWidget {
   final String? initialDestination;
 
-  const MapScreen({super.key, this.initialDestination});
+  final ValueChanged<RouteResponse?>? onAnalyzed;
+  final ApiService? api;
+  final Future<List<LocationSearchResult>> Function(String)? searchPlaces;
+  final TileProvider? tileProvider;
+  const MapScreen({
+    super.key,
+    this.initialDestination,
+    this.onAnalyzed,
+    this.api,
+    this.searchPlaces,
+    this.tileProvider,
+  });
 
   @override
   State<MapScreen> createState() => _MapScreenState();
@@ -33,9 +38,7 @@ class MapScreen extends StatefulWidget {
 class _MapScreenState extends State<MapScreen> {
   // ─── Map & Routing State Variables ──────────────────────────────────────────
   final MapController _mapController = MapController();
-  final TextEditingController _sourceController = TextEditingController(
-    text: '📍 Acquiring live GPS location...',
-  );
+  final TextEditingController _sourceController = TextEditingController();
   final TextEditingController _destinationController = TextEditingController();
 
   // Coordinates
@@ -47,7 +50,6 @@ class _MapScreenState extends State<MapScreen> {
   String? _destinationName;
 
   // Real-time GPS Stream & Debounce Timers
-  StreamSubscription<Position>? _positionStreamSubscription;
   Timer? _debounceTimer;
   int _searchRequestId = 0;
 
@@ -55,20 +57,18 @@ class _MapScreenState extends State<MapScreen> {
   List<LatLng> _routePoints = [];
   double _routeDistanceKm = 0.0;
   double _routeDurationMin = 0.0;
-  RiskResult? _routeRisk;
+  RouteResponse? _routeRisk;
   String? _riskError;
   bool _isLoadingRisk = false;
 
   // Hazards from Backend
-  List<Hazard> _nearbyHazards = [];
-  String? _hazardError;
+  List<HazardSummary> _nearbyHazards = [];
   bool _isLoadingHazards = false;
-  double? _userElevationMeters;
-  int _assessmentRequestId = 0;
+  int _gpsRequestId = 0;
   int _routeRequestId = 0;
 
   // Loading & State flags
-  bool _isLoadingGps = true;
+  bool _isLoadingGps = false;
   bool _isSearching = false;
   bool _isCalculatingRoute = false;
   bool _showHazardOverlay = true;
@@ -84,7 +84,6 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void initState() {
     super.initState();
-    _initMobileGpsTracking();
 
     if (widget.initialDestination != null &&
         widget.initialDestination!.isNotEmpty) {
@@ -96,216 +95,61 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void dispose() {
     _debounceTimer?.cancel();
-    _positionStreamSubscription?.cancel();
+    _mapController.dispose();
     _sourceController.dispose();
     _destinationController.dispose();
     super.dispose();
   }
 
-  // ─── 1. OPTIMIZED PHONE & EMULATOR GPS ENGINE ───────────────────────────────
+  Future<List<LocationSearchResult>> _searchPlaces(String query) =>
+      (widget.searchPlaces ?? RoutingService.searchDestination)(query);
+
+  void _invalidateRoute() {
+    _routeRequestId++;
+    _routePoints = [];
+    _routeRisk = null;
+    _nearbyHazards = [];
+    _riskError = null;
+    _isCalculatingRoute = false;
+    _isLoadingRisk = false;
+    _isLoadingHazards = false;
+    widget.onAnalyzed?.call(null);
+  }
+
   Future<void> _initMobileGpsTracking() async {
+    final id = ++_gpsRequestId;
     setState(() => _isLoadingGps = true);
-
     try {
-      // 1. Check if device location services (GPS) are enabled
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled && mounted) {
+      final position = await requireCurrentLocation();
+      if (!mounted || id != _gpsRequestId) return;
+      final point = LatLng(position.latitude, position.longitude);
+      setState(() {
+        _invalidateRoute();
+        _userGpsLocation = point;
+        _sourceLocation = point;
+        _sourceName = 'Current Location';
+        _sourceController.text = _sourceName;
+      });
+      _mapController.move(point, 14.5);
+      await _calculateRoute();
+    } catch (error) {
+      if (mounted && id == _gpsRequestId) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text(
-              'Device GPS is turned OFF. Tap Settings to enable.',
-            ),
-            backgroundColor: const Color(0xFFDC2626),
-            action: SnackBarAction(
-              label: 'SETTINGS',
-              textColor: Colors.white,
-              onPressed: () => Geolocator.openLocationSettings(),
+            content: Text(
+              error is ApiException
+                  ? error.message
+                  : 'GPS unavailable. Select a source manually.',
             ),
           ),
         );
       }
-
-      // 2. Check and request runtime location permissions
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-
-      if (permission == LocationPermission.deniedForever && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Location permission permanently denied.'),
-            backgroundColor: const Color(0xFFDC2626),
-            action: SnackBarAction(
-              label: 'SETTINGS',
-              textColor: Colors.white,
-              onPressed: () => Geolocator.openAppSettings(),
-            ),
-          ),
-        );
-        _applyDemoLocation('Permission denied — using Demo Location');
-        return;
-      }
-
-      if (permission == LocationPermission.denied) {
-        _applyDemoLocation('Permission denied — using Demo Location');
-        return;
-      }
-
-      // ─── STAGE 1: Fast Instant Location from Phone's GPS Cache ──────────────
-      try {
-        final Position? lastKnown = await Geolocator.getLastKnownPosition();
-        if (lastKnown != null && mounted) {
-          _processAcquiredPosition(lastKnown, isPreliminary: true);
-        }
-      } catch (_) {}
-
-      // ─── STAGE 2: High-Accuracy Fresh Satellite/Fused Fix ───────────────────
-      late LocationSettings locationSettings;
-      if (defaultTargetPlatform == TargetPlatform.android) {
-        locationSettings = AndroidSettings(
-          accuracy: LocationAccuracy.high,
-          distanceFilter: 5,
-          forceLocationManager: false,
-          intervalDuration: const Duration(seconds: 2),
-          timeLimit: const Duration(seconds: 12),
-        );
-      } else if (defaultTargetPlatform == TargetPlatform.iOS ||
-          defaultTargetPlatform == TargetPlatform.macOS) {
-        locationSettings = AppleSettings(
-          accuracy: LocationAccuracy.high,
-          activityType: ActivityType.fitness,
-          distanceFilter: 5,
-          timeLimit: const Duration(seconds: 12),
-        );
-      } else {
-        locationSettings = const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          distanceFilter: 5,
-          timeLimit: Duration(seconds: 12),
-        );
-      }
-
-      final Position position = await Geolocator.getCurrentPosition(
-        locationSettings: locationSettings,
-      );
-
-      _processAcquiredPosition(position, isPreliminary: false);
-
-      // ─── STAGE 3: Real-Time Movement Stream ─────────────────────────────────
-      _startLivePositionStream(locationSettings);
-    } catch (e) {
-      if (_userGpsLocation == null) {
-        _applyDemoLocation('GPS timeout — using Demo Hub');
-      } else {
-        if (mounted) setState(() => _isLoadingGps = false);
-      }
+    } finally {
+      if (mounted && id == _gpsRequestId) setState(() => _isLoadingGps = false);
     }
   }
 
-  // Handle position resolution with smart Emulator SF detection
-  void _processAcquiredPosition(
-    Position position, {
-    required bool isPreliminary,
-  }) {
-    // Detect if coordinates are default Android Emulator (Mountain View, California)
-    final bool isSanFranciscoEmulatorDefault =
-        position.latitude >= 37.40 &&
-        position.latitude <= 37.45 &&
-        position.longitude >= -122.12 &&
-        position.longitude <= -122.05;
-
-    LatLng finalCoords;
-    if (isSanFranciscoEmulatorDefault) {
-      // Auto-route on Indian Tourism Demo Hub for smooth emulator presentation
-      finalCoords = _tourGuardDemoHub;
-    } else {
-      finalCoords = LatLng(position.latitude, position.longitude);
-    }
-
-    if (mounted) {
-      setState(() {
-        _userGpsLocation = finalCoords;
-        _sourceLocation = finalCoords;
-        _userElevationMeters = position.altitude >= 0
-            ? position.altitude
-            : null;
-        _isLoadingGps = false;
-      });
-
-      _mapController.move(finalCoords, 14.5);
-      _reverseGeocodeLiveLocation(finalCoords);
-
-      if (_destinationLocation != null && !isPreliminary) {
-        _calculateRoute();
-      }
-    }
-  }
-
-  void _applyDemoLocation(String message) {
-    if (!mounted) return;
-    setState(() {
-      _isLoadingGps = false;
-      _userGpsLocation = _tourGuardDemoHub;
-      _sourceLocation = _tourGuardDemoHub;
-      _sourceName = 'Ooty Demo Hub';
-      _sourceController.text = '📍 Ooty (Demo Location)';
-    });
-    _mapController.move(_tourGuardDemoHub, 14.5);
-  }
-
-  Future<void> _reverseGeocodeLiveLocation(LatLng loc) async {
-    final placeName = await RoutingService.reverseGeocode(
-      loc.latitude,
-      loc.longitude,
-    );
-
-    if (mounted) {
-      setState(() {
-        if (placeName != null && placeName.isNotEmpty) {
-          _sourceName = placeName;
-          _sourceController.text = '📍 $placeName (Live Location)';
-        } else {
-          _sourceName = 'Live Location';
-          _sourceController.text = '📍 My Live Location';
-        }
-      });
-    }
-  }
-
-  void _startLivePositionStream(LocationSettings settings) {
-    _positionStreamSubscription?.cancel();
-    _positionStreamSubscription =
-        Geolocator.getPositionStream(locationSettings: settings)
-            .listen((Position position) {
-              final bool isSanFranciscoEmulator =
-                  position.latitude >= 37.40 &&
-                  position.latitude <= 37.45 &&
-                  position.longitude >= -122.12 &&
-                  position.longitude <= -122.05;
-
-              if (isSanFranciscoEmulator) return;
-
-              final newGps = LatLng(position.latitude, position.longitude);
-              if (mounted) {
-                setState(() {
-                  _userGpsLocation = newGps;
-                  if (_sourceController.text.contains('Live Location') ||
-                      _sourceController.text.contains('My Location')) {
-                    _sourceLocation = newGps;
-                  }
-                });
-              }
-            }, onError: (_) {});
-  }
-
-  // ─── 2. RESET SOURCE TO LIVE GPS LOCATION ──────────────────────────────────
-  void _resetSourceToLiveGps() {
-    _initMobileGpsTracking();
-    if (_userGpsLocation != null) {
-      _mapController.move(_userGpsLocation!, 15.0);
-    }
-  }
+  void _resetSourceToLiveGps() => _initMobileGpsTracking();
 
   // ─── 3. INTERACTIVE TAP TO SET DESTINATION ──────────────────────────────────
   Future<void> _onMapTapped(LatLng tappedPoint) async {
@@ -323,7 +167,7 @@ class _MapScreenState extends State<MapScreen> {
       tappedPoint.latitude,
       tappedPoint.longitude,
     );
-    if (name != null && mounted) {
+    if (name != null && mounted && _destinationLocation == tappedPoint) {
       setState(() {
         _destinationName = name;
         _destinationController.text = name;
@@ -333,11 +177,18 @@ class _MapScreenState extends State<MapScreen> {
 
   // ─── 4. SEARCH SOURCE SUGGESTIONS WITH DEBOUNCE ─────────────────────────────
   void _onSourceTextChanged(String query) {
+    _gpsRequestId++;
+    _isLoadingGps = false;
+    setState(() {
+      _sourceLocation = null;
+      _destinationSuggestions = [];
+      _invalidateRoute();
+    });
     _isFocusedOnSource = true;
     _debounceTimer?.cancel();
     final requestId = ++_searchRequestId;
 
-    if (query.trim().isEmpty || query.contains('📍')) {
+    if (query.trim().isEmpty) {
       setState(() {
         _sourceSuggestions = [];
         _isSearching = false;
@@ -348,18 +199,32 @@ class _MapScreenState extends State<MapScreen> {
     setState(() => _isSearching = true);
 
     _debounceTimer = Timer(const Duration(milliseconds: 300), () async {
-      final results = await RoutingService.searchDestination(query);
+      final results = await _searchPlaces(query);
       if (mounted && requestId == _searchRequestId) {
         setState(() {
           _sourceSuggestions = results;
           _isSearching = false;
         });
+        if (results.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'No places found. Check your connection or refine the search.',
+              ),
+            ),
+          );
+        }
       }
     });
   }
 
   // ─── 5. SEARCH DESTINATION SUGGESTIONS WITH DEBOUNCE ────────────────────────
   void _onDestinationTextChanged(String query) {
+    setState(() {
+      _destinationLocation = null;
+      _sourceSuggestions = [];
+      _invalidateRoute();
+    });
     _isFocusedOnSource = false;
     _debounceTimer?.cancel();
     final requestId = ++_searchRequestId;
@@ -375,12 +240,21 @@ class _MapScreenState extends State<MapScreen> {
     setState(() => _isSearching = true);
 
     _debounceTimer = Timer(const Duration(milliseconds: 300), () async {
-      final results = await RoutingService.searchDestination(query);
+      final results = await _searchPlaces(query);
       if (mounted && requestId == _searchRequestId) {
         setState(() {
           _destinationSuggestions = results;
           _isSearching = false;
         });
+        if (results.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'No places found. Check your connection or refine the search.',
+              ),
+            ),
+          );
+        }
       }
     });
   }
@@ -395,7 +269,7 @@ class _MapScreenState extends State<MapScreen> {
       _destinationSuggestions = [];
     });
 
-    final results = await RoutingService.searchDestination(query);
+    final results = await _searchPlaces(query);
 
     if (mounted && requestId == _searchRequestId) {
       setState(() => _isSearching = false);
@@ -414,6 +288,8 @@ class _MapScreenState extends State<MapScreen> {
 
   // ─── 6. SELECT SOURCE & DESTINATION ─────────────────────────────────────────
   void _selectSource(LocationSearchResult place) {
+    _gpsRequestId++;
+    _isLoadingGps = false;
     _debounceTimer?.cancel();
     _searchRequestId++;
     setState(() {
@@ -449,6 +325,15 @@ class _MapScreenState extends State<MapScreen> {
 
   // ─── 7. SWAP SOURCE & DESTINATION (⇅) ───────────────────────────────────────
   void _swapSourceAndDestination() {
+    _gpsRequestId++;
+    _isLoadingGps = false;
+    _debounceTimer?.cancel();
+    _searchRequestId++;
+    setState(() {
+      _sourceSuggestions = [];
+      _destinationSuggestions = [];
+      _invalidateRoute();
+    });
     if (_destinationLocation == null && _sourceLocation == null) return;
 
     setState(() {
@@ -470,99 +355,55 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  // ─── 8. CALCULATE DRIVING ROUTE (OSRM API + FALLBACK) ───────────────────────
+  // Display and assess the same route returned by FastAPI.
   Future<void> _calculateRoute() async {
-    final start = _sourceLocation ?? _userGpsLocation ?? _tourGuardDemoHub;
+    setState(_invalidateRoute);
+    final start = _sourceLocation;
     final end = _destinationLocation;
-
-    if (end == null) return;
-
+    if (start == null || end == null) return;
     final requestId = ++_routeRequestId;
-    setState(() => _isCalculatingRoute = true);
-
-    final routeData = await RoutingService.getDrivingRoute(start, end);
-
-    if (mounted && requestId == _routeRequestId) {
-      setState(() {
-        _isCalculatingRoute = false;
-        if (routeData != null) {
-          _routePoints = routeData.polylinePoints;
-          _routeDistanceKm = routeData.distanceInKm;
-          _routeDurationMin = routeData.durationInMinutes;
-        } else {
-          _routePoints = [start, end];
-          _routeDistanceKm = 10.0;
-          _routeDurationMin = 20.0;
-        }
-      });
-
-      _fitRouteBounds();
-      _loadRouteAssessments(end);
-    }
-  }
-
-  void _loadRouteAssessments(LatLng destination) {
-    final requestId = ++_assessmentRequestId;
     setState(() {
+      _isCalculatingRoute = true;
       _isLoadingRisk = true;
       _isLoadingHazards = true;
-      _riskError = null;
-      _hazardError = null;
-      _routeRisk = null;
-      _nearbyHazards = [];
     });
-    unawaited(_loadRouteRisk(destination, requestId));
-    unawaited(_loadNearbyHazards(destination, requestId));
-  }
-
-  Future<void> _loadRouteRisk(LatLng destination, int requestId) async {
     try {
-      final result = await BackendService.predictRisk(
-        // The backend currently has no live weather/terrain feed; these are
-        // sample inputs, not observed conditions.
-        rainfallMmH: 0,
-        slopeDegrees: 0,
-        elevationM: _userElevationMeters ?? 0,
-        windKmh: 0,
-        visibilityKm: 8,
-        touristDensity: 0.3,
-        latitude: destination.latitude,
-        longitude: destination.longitude,
+      final result = await (widget.api ?? ApiService.instance).analyzeRoute(
+        originLat: start.latitude,
+        originLng: start.longitude,
+        destLat: end.latitude,
+        destLng: end.longitude,
       );
-      if (!mounted || requestId != _assessmentRequestId) return;
+      if (!mounted || requestId != _routeRequestId) return;
       setState(() {
+        _routePoints = result.points;
+        _routeDistanceKm = result.distanceMeters / 1000;
+        _routeDurationMin = result.durationSeconds / 60;
         _routeRisk = result;
-        _isLoadingRisk = false;
+        _nearbyHazards = result.hazards;
       });
+      _fitRouteBounds();
+      widget.onAnalyzed?.call(result);
     } catch (error) {
-      debugPrint('Route risk request failed: $error');
-      if (!mounted || requestId != _assessmentRequestId) return;
-      setState(() {
-        _riskError = 'Risk service unavailable. Check the backend connection.';
-        _isLoadingRisk = false;
-      });
-    }
-  }
-
-  Future<void> _loadNearbyHazards(LatLng destination, int requestId) async {
-    try {
-      final hazards = await BackendService.getNearbyHazards(
-        lat: destination.latitude,
-        lon: destination.longitude,
+      if (!mounted || requestId != _routeRequestId) return;
+      setState(
+        () => _riskError = error is ApiException
+            ? error.message
+            : 'Route analysis failed. Please retry.',
       );
-      if (!mounted || requestId != _assessmentRequestId) return;
-      setState(() {
-        _nearbyHazards = hazards;
-        _isLoadingHazards = false;
-      });
-    } catch (error) {
-      debugPrint('Nearby hazards request failed: $error');
-      if (!mounted || requestId != _assessmentRequestId) return;
-      setState(() {
-        _hazardError =
-            'Hazard reports unavailable. Check the backend connection.';
-        _isLoadingHazards = false;
-      });
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(_riskError!)));
+      if (error is ApiException && error.unauthorized) {
+        Navigator.pushNamedAndRemoveUntil(context, '/login', (_) => false);
+      }
+    } finally {
+      if (mounted && requestId == _routeRequestId) {
+        setState(() {
+          _isCalculatingRoute = false;
+          _isLoadingRisk = false;
+          _isLoadingHazards = false;
+        });
+      }
     }
   }
 
@@ -574,9 +415,9 @@ class _MapScreenState extends State<MapScreen> {
       _mapController.fitCamera(
         CameraFit.bounds(
           bounds: bounds,
-          padding: const EdgeInsets.only(
+          padding: EdgeInsets.only(
             top: 200,
-            bottom: 260,
+            bottom: MediaQuery.sizeOf(context).height * .4,
             left: 50,
             right: 50,
           ),
@@ -647,6 +488,8 @@ class _MapScreenState extends State<MapScreen> {
                   subtitle: 'Mountain Hill Road • Landslide & Rain Assessment',
                   onTap: () {
                     Navigator.pop(context);
+                    _gpsRequestId++;
+                    _isLoadingGps = false;
                     setState(() {
                       _sourceLocation = _tourGuardDemoHub;
                       _sourceName = 'Ooty Town';
@@ -700,8 +543,7 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveSource =
-        _sourceLocation ?? _userGpsLocation ?? _tourGuardDemoHub;
+    final effectiveSource = _sourceLocation ?? _tourGuardDemoHub;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F9FC),
@@ -720,6 +562,7 @@ class _MapScreenState extends State<MapScreen> {
             children: [
               TileLayer(
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                tileProvider: widget.tileProvider,
                 userAgentPackageName: 'com.tourguard.travelriskapp',
               ),
 
@@ -744,48 +587,49 @@ class _MapScreenState extends State<MapScreen> {
               MarkerLayer(
                 markers: [
                   // LIVE USER GPS / SOURCE MARKER
-                  Marker(
-                    point: effectiveSource,
-                    width: 54,
-                    height: 54,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Container(
-                          width: 52,
-                          height: 52,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF087CF0)
-                                .withValues(alpha: 0.25),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF087CF0),
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 3),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Color(0x33000000),
-                                blurRadius: 8,
-                                offset: Offset(0, 3),
-                              ),
-                            ],
-                          ),
-                          child: const Center(
-                            child: Icon(
-                              Icons.navigation_rounded,
-                              color: Colors.white,
-                              size: 16,
+                  if (_sourceLocation != null)
+                    Marker(
+                      point: _sourceLocation!,
+                      width: 54,
+                      height: 54,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Container(
+                            width: 52,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF087CF0)
+                                  .withValues(alpha: 0.25),
+                              shape: BoxShape.circle,
                             ),
                           ),
-                        ),
-                      ],
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF087CF0),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 3),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Color(0x33000000),
+                                  blurRadius: 8,
+                                  offset: Offset(0, 3),
+                                ),
+                              ],
+                            ),
+                            child: const Center(
+                              child: Icon(
+                                Icons.navigation_rounded,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
 
                   // DESTINATION MARKER (Red Pin)
                   if (_destinationLocation != null)
@@ -812,26 +656,18 @@ class _MapScreenState extends State<MapScreen> {
                         ],
                       ),
                     ),
-                  if (_showHazardOverlay)
-                    ..._nearbyHazards.map(
-                      (hazard) => Marker(
-                        point: LatLng(hazard.lat, hazard.lon),
-                        width: 36,
-                        height: 36,
-                        child: Tooltip(
-                          message:
-                              '${hazard.severity.toUpperCase()}: ${hazard.title}',
-                          child: Icon(
-                            Icons.warning_rounded,
-                            color: _hazardColor(hazard.severity),
-                            size: 30,
-                          ),
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ],
+          ),
+
+          const Positioned(
+            left: 8,
+            bottom: 0,
+            child: Text(
+              '© OpenStreetMap contributors',
+              style: TextStyle(fontSize: 10, backgroundColor: Colors.white),
+            ),
           ),
 
           // ─── 2. TOP FLOATING SOURCE & DESTINATION ROUTING CARD ──────────────
@@ -905,6 +741,7 @@ class _MapScreenState extends State<MapScreen> {
                               child: TextField(
                                 controller: _sourceController,
                                 onChanged: _onSourceTextChanged,
+                                onSubmitted: _onSourceTextChanged,
                                 decoration: const InputDecoration(
                                   hintText:
                                       'Start from (Live Location or City)...',
@@ -929,7 +766,7 @@ class _MapScreenState extends State<MapScreen> {
                                 color: Color(0xFF087CF0),
                                 size: 18,
                               ),
-                              tooltip: 'Re-detect Live GPS Location',
+                              tooltip: 'Use Current Location',
                               onPressed: _resetSourceToLiveGps,
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
@@ -1037,34 +874,37 @@ class _MapScreenState extends State<MapScreen> {
                           final result = _isFocusedOnSource
                               ? _sourceSuggestions[index]
                               : _destinationSuggestions[index];
-                          return ListTile(
-                            dense: true,
-                            leading: Icon(
-                              _isFocusedOnSource
-                                  ? Icons.trip_origin_rounded
-                                  : Icons.location_on_outlined,
-                              color: _isFocusedOnSource
-                                  ? const Color(0xFF087CF0)
-                                  : const Color(0xFFDC2626),
-                              size: 18,
-                            ),
-                            title: Text(
-                              result.displayName,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: Color(0xFF1A2D4F),
+                          return Material(
+                            color: Colors.transparent,
+                            child: ListTile(
+                              dense: true,
+                              leading: Icon(
+                                _isFocusedOnSource
+                                    ? Icons.trip_origin_rounded
+                                    : Icons.location_on_outlined,
+                                color: _isFocusedOnSource
+                                    ? const Color(0xFF087CF0)
+                                    : const Color(0xFFDC2626),
+                                size: 18,
                               ),
+                              title: Text(
+                                result.displayName,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: Color(0xFF1A2D4F),
+                                ),
+                              ),
+                              onTap: () {
+                                if (_isFocusedOnSource) {
+                                  _selectSource(result);
+                                } else {
+                                  _selectDestination(result);
+                                }
+                              },
                             ),
-                            onTap: () {
-                              if (_isFocusedOnSource) {
-                                _selectSource(result);
-                              } else {
-                                _selectDestination(result);
-                              }
-                            },
                           );
                         },
                       ),
@@ -1077,9 +917,31 @@ class _MapScreenState extends State<MapScreen> {
           // ─── 3. RIGHT SIDE CONTROLS (Demo Presets, GPS Re-center & Layers) ──
           Positioned(
             right: 16,
-            bottom: _routePoints.isNotEmpty ? 240 : 30,
+            bottom: _routePoints.isNotEmpty
+                ? MediaQuery.sizeOf(context).height * .38 + 30
+                : 30,
             child: Column(
               children: [
+                FloatingActionButton.small(
+                  heroTag: 'zoom_in',
+                  tooltip: 'Zoom in',
+                  onPressed: () => _mapController.move(
+                    _mapController.camera.center,
+                    (_mapController.camera.zoom + 1).clamp(3, 18),
+                  ),
+                  child: const Icon(Icons.add),
+                ),
+                const SizedBox(height: 10),
+                FloatingActionButton.small(
+                  heroTag: 'zoom_out',
+                  tooltip: 'Zoom out',
+                  onPressed: () => _mapController.move(
+                    _mapController.camera.center,
+                    (_mapController.camera.zoom - 1).clamp(3, 18),
+                  ),
+                  child: const Icon(Icons.remove),
+                ),
+                const SizedBox(height: 10),
                 // Demo Presets Action Button
                 FloatingActionButton.small(
                   heroTag: 'fab_demo_presets',
@@ -1106,14 +968,14 @@ class _MapScreenState extends State<MapScreen> {
                       SnackBar(
                         content: Text(
                           _showHazardOverlay
-                              ? 'Hazard GIS Layers Enabled'
-                              : 'Hazard GIS Layers Disabled',
+                              ? 'Hazard details shown in route summary'
+                              : 'Hazard details hidden',
                         ),
                         duration: const Duration(seconds: 1),
                       ),
                     );
                   },
-                  tooltip: 'Toggle GIS Hazard Layers',
+                  tooltip: 'Toggle hazard details',
                   child: const Icon(Icons.layers_rounded, size: 20),
                 ),
                 const SizedBox(height: 10),
@@ -1149,45 +1011,41 @@ class _MapScreenState extends State<MapScreen> {
               left: 16,
               right: 16,
               bottom: 20,
-              child: _RouteRiskSummaryCard(
-                sourceName: _sourceName,
-                destinationName: _destinationName ?? 'Destination',
-                distanceKm: _routeDistanceKm,
-                durationMin: _routeDurationMin,
-                risk: _routeRisk,
-                riskError: _riskError,
-                isLoadingRisk: _isLoadingRisk,
-                hazards: _nearbyHazards,
-                hazardError: _hazardError,
-                isLoadingHazards: _isLoadingHazards,
-                onStartTrip: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Safe navigation active: $_sourceName ➔ ${_destinationName ?? "Destination"}',
-                      ),
-                      backgroundColor: const Color(0xFF1EAA55),
-                    ),
-                  );
-                },
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * .38,
+                ),
+                child: SingleChildScrollView(
+                  child: _RouteRiskSummaryCard(
+                    sourceName: _sourceName,
+                    destinationName: _destinationName ?? 'Destination',
+                    distanceKm: _routeDistanceKm,
+                    durationMin: _routeDurationMin,
+                    risk: _routeRisk,
+                    riskError: _riskError,
+                    isLoadingRisk: _isLoadingRisk,
+                    hazards: _nearbyHazards,
+                    showHazards: _showHazardOverlay,
+                    hazardError: _riskError,
+                    isLoadingHazards: _isLoadingHazards,
+                    onStartTrip: () {
+                      _fitRouteBounds();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Route overview: $_sourceName ➔ ${_destinationName ?? "Destination"}',
+                          ),
+                          backgroundColor: const Color(0xFF1EAA55),
+                        ),
+                      );
+                    },
+                  ),
+                ),
               ),
             ),
         ],
       ),
     );
-  }
-}
-
-Color _hazardColor(String severity) {
-  switch (severity.toLowerCase()) {
-    case 'critical':
-      return const Color(0xFF7C3AED);
-    case 'high':
-      return const Color(0xFFDC2626);
-    case 'medium':
-      return const Color(0xFFF97316);
-    default:
-      return const Color(0xFFEAB308);
   }
 }
 
@@ -1242,10 +1100,11 @@ class _RouteRiskSummaryCard extends StatelessWidget {
   final String destinationName;
   final double distanceKm;
   final double durationMin;
-  final RiskResult? risk;
+  final RouteResponse? risk;
   final String? riskError;
   final bool isLoadingRisk;
-  final List<Hazard> hazards;
+  final List<HazardSummary> hazards;
+  final bool showHazards;
   final String? hazardError;
   final bool isLoadingHazards;
   final VoidCallback onStartTrip;
@@ -1259,6 +1118,7 @@ class _RouteRiskSummaryCard extends StatelessWidget {
     required this.riskError,
     required this.isLoadingRisk,
     required this.hazards,
+    required this.showHazards,
     required this.hazardError,
     required this.isLoadingHazards,
     required this.onStartTrip,
@@ -1346,12 +1206,12 @@ class _RouteRiskSummaryCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: risk == null
                       ? const Color(0xFFF1F5F9)
-                      : _riskColor(risk!.color).withValues(alpha: 0.12),
+                      : _riskColor(risk!.riskLevel).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
                     color: risk == null
                         ? const Color(0xFFE2E8F0)
-                        : _riskColor(risk!.color).withValues(alpha: 0.35),
+                        : _riskColor(risk!.riskLevel).withValues(alpha: 0.35),
                   ),
                 ),
                 child: Row(
@@ -1368,18 +1228,18 @@ class _RouteRiskSummaryCard extends StatelessWidget {
                         size: 14,
                         color: risk == null
                             ? const Color(0xFF64748B)
-                            : _riskColor(risk!.color),
+                            : _riskColor(risk!.riskLevel),
                       ),
                     const SizedBox(width: 4),
                     Text(
-                      risk?.riskLabel.toUpperCase() ??
+                      risk?.riskLevel ??
                           (riskError == null ? 'RISK PENDING' : 'UNAVAILABLE'),
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
                         color: risk == null
                             ? const Color(0xFF64748B)
-                            : _riskColor(risk!.color),
+                            : _riskColor(risk!.riskLevel),
                       ),
                     ),
                   ],
@@ -1392,7 +1252,7 @@ class _RouteRiskSummaryCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               risk != null
-                  ? 'Prototype model · sample weather/terrain inputs · score ${risk!.riskScore}/100. ${risk!.advice}'
+                  ? [...risk!.reasons, ...risk!.limitations].join(' ')
                   : riskError ?? 'Risk service unavailable.',
               style: const TextStyle(
                 fontSize: 11,
@@ -1416,11 +1276,13 @@ class _RouteRiskSummaryCard extends StatelessWidget {
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  isLoadingHazards
+                  !showHazards
+                      ? 'Hazard details hidden'
+                      : isLoadingHazards
                       ? 'Loading nearby hazard reports...'
                       : hazardError != null
                       ? hazardError!
-                      : '${hazards.length} nearby hazard report${hazards.length == 1 ? '' : 's'} (demo data)',
+                      : '${hazards.length} nearby hazard report${hazards.length == 1 ? '' : 's'}${hazards.isEmpty ? '' : ': ${hazards.map((h) => '${h.name} (${h.hazardType}, ${h.severity}/5)').join('; ')}'}',
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -1441,7 +1303,7 @@ class _RouteRiskSummaryCard extends StatelessWidget {
               onPressed: onStartTrip,
               icon: const Icon(Icons.navigation_rounded, size: 20),
               label: const Text(
-                'START SAFE NAVIGATION',
+                'VIEW FULL ROUTE',
                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
               ),
               style: ElevatedButton.styleFrom(
@@ -1460,8 +1322,9 @@ class _RouteRiskSummaryCard extends StatelessWidget {
   }
 }
 
-Color _riskColor(String hexColor) {
-  final normalized = hexColor.replaceFirst('#', '');
-  final value = int.tryParse(normalized, radix: 16);
-  return value == null ? const Color(0xFF64748B) : Color(0xFF000000 | value);
-}
+Color _riskColor(String level) => switch (level) {
+  'SAFE' => const Color(0xFF1EAA55),
+  'CAUTION' => const Color(0xFFF97316),
+  'HIGH RISK' => const Color(0xFFDC2626),
+  _ => const Color(0xFF64748B),
+};

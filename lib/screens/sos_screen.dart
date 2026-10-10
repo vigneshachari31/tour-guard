@@ -1,10 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
-import '../services/backend_service.dart';
+import '../services/api_service.dart';
+import '../services/current_location.dart';
 import '../services/routing_service.dart';
 import '../services/tourist_profile_store.dart';
 
@@ -17,7 +17,7 @@ import '../services/tourist_profile_store.dart';
 // 3. Live Telemetry: GPS Coordinates (Lat/Lng), Altitude, and Timestamp.
 // 4. Tourist Medical Context: Blood Group, Emergency Contacts & Digital ID.
 // 5. Emergency Hotline Quick-Dials: 112 (Police), 108 (Ambulance), 1077 (Disaster).
-// 6. Backend SOS logging (demo acknowledgement; no emergency dispatch).
+// 6. Backend SOS logging (recording does not confirm emergency dispatch).
 // ==============================================================================
 
 class SosScreen extends StatefulWidget {
@@ -38,13 +38,12 @@ class _SosScreenState extends State<SosScreen>
   bool _isCountingDown = false;
   bool _isSosDispatched = false;
   bool _isSosDispatching = false;
-  bool _hasLiveLocation = false;
   String? _sosStatusMessage;
 
   // ─── Live Telemetry State ───────────────────────────────────────────────────
-  LatLng _currentLocation = const LatLng(11.4102, 76.6950);
-  double _altitudeMeters = 2240.0;
-  String _localityName = 'Nilgiris District, Tamil Nadu';
+  LatLng? _currentLocation;
+  double? _altitudeMeters;
+  String _localityName = 'Location unavailable';
   bool _isLoadingGps = true;
 
   // Profile values are stored locally until account-backed profiles exist.
@@ -87,21 +86,15 @@ class _SosScreenState extends State<SosScreen>
   // ─── 1. FETCH LIVE GPS TELEMETRY ───────────────────────────────────────────
   Future<void> _fetchLiveTelemetry() async {
     try {
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 6),
-        ),
-      );
+      final position = await requireCurrentLocation();
 
       final latLng = LatLng(position.latitude, position.longitude);
 
       if (mounted) {
         setState(() {
           _currentLocation = latLng;
-          _altitudeMeters = position.altitude > 0 ? position.altitude : 2240.0;
+          _altitudeMeters = position.altitude;
           _isLoadingGps = false;
-          _hasLiveLocation = true;
         });
 
         // Reverse geocode to get human-readable location name
@@ -164,40 +157,17 @@ class _SosScreenState extends State<SosScreen>
       _isSosDispatching = true;
     });
 
-    if (!_hasLiveLocation) {
-      const message =
-          'SOS was not sent: live GPS is unavailable. Call emergency services directly.';
-      setState(() {
-        _isSosDispatching = false;
-        _sosStatusMessage = message;
-      });
-      _showSosMessage(message, isError: true);
-      return;
-    }
-
     try {
-      final result = await BackendService.dispatchSos(
-        latitude: _currentLocation.latitude,
-        longitude: _currentLocation.longitude,
-        altitudeM: _altitudeMeters,
-        userName: _touristProfile.name.trim().isEmpty
-            ? 'Tourist'
-            : _touristProfile.name.trim(),
-        bloodGroup: _optionalProfileValue(_touristProfile.bloodGroup),
-        medicalNotes: _optionalProfileValue(_touristProfile.medicalNotes),
-        allergies: _optionalProfileValue(_touristProfile.allergies),
-        emergencyContact: _optionalProfileValue(
-          _touristProfile.emergencyContact,
-        ),
-        locationName: _localityName,
+      final position = await requireCurrentLocation();
+      final result = await ApiService.instance.triggerSOS(
+        latitude: position.latitude,
+        longitude: position.longitude,
       );
       if (!mounted) return;
       setState(() {
         _isSosDispatching = false;
         _isSosDispatched = true;
-        _sosStatusMessage =
-            'Demo backend logged incident ${result.incidentId}. '
-            'No rescue team or emergency service was contacted.';
+        _sosStatusMessage = 'Incident ${result.id}: ${result.message}';
       });
       _showSosMessage(_sosStatusMessage!, isError: false);
     } catch (error) {
@@ -205,10 +175,14 @@ class _SosScreenState extends State<SosScreen>
       if (!mounted) return;
       setState(() {
         _isSosDispatching = false;
-        _sosStatusMessage =
-            'SOS request failed. Try again or call emergency services directly.';
+        _sosStatusMessage = error is ApiException
+            ? error.message
+            : 'SOS confirmation unavailable. Call emergency services directly.';
       });
       _showSosMessage(_sosStatusMessage!, isError: true);
+      if (error is ApiException && error.unauthorized) {
+        Navigator.pushNamedAndRemoveUntil(context, '/login', (_) => false);
+      }
     }
   }
 
@@ -295,9 +269,9 @@ class _SosScreenState extends State<SosScreen>
                     const SizedBox(width: 8),
                     Text(
                       _isSosDispatched
-                          ? '✅ INCIDENT LOGGED IN DEMO BACKEND'
+                          ? '✅ SOS INCIDENT RECORDED'
                           : _isSosDispatching
-                          ? '⏳ SENDING TO DEMO BACKEND'
+                          ? '⏳ RECORDING SOS INCIDENT'
                           : '⚡ SOS BACKEND READY',
                       style: TextStyle(
                         fontSize: 11,
@@ -466,7 +440,7 @@ class _SosScreenState extends State<SosScreen>
                     ? 'Demo backend accepted the incident; no emergency services were contacted.'
                     : _isSosDispatching
                     ? 'Sending current GPS location to the backend...'
-                    : 'Tap SOS to log a demo incident after a 3-second countdown',
+                    : 'Tap SOS to record your location after a 3-second countdown',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -544,12 +518,15 @@ class _SosScreenState extends State<SosScreen>
                       label: 'GPS Coordinates',
                       value: _isLoadingGps
                           ? 'Acquiring high-accuracy fix...'
-                          : '${_currentLocation.latitude.toStringAsFixed(5)}°N, ${_currentLocation.longitude.toStringAsFixed(5)}°E',
+                          : _currentLocation == null
+                          ? 'GPS unavailable'
+                          : '${_currentLocation!.latitude.toStringAsFixed(5)}, ${_currentLocation!.longitude.toStringAsFixed(5)}',
                     ),
                     _TelemetryRow(
                       label: 'Elevation',
-                      value:
-                          '${_altitudeMeters.toStringAsFixed(0)} m ASL (Highland)',
+                      value: _altitudeMeters == null
+                          ? 'Unavailable'
+                          : '${_altitudeMeters!.toStringAsFixed(0)} m ASL',
                     ),
                     _TelemetryRow(
                       label: 'Nearest Location',
@@ -712,9 +689,6 @@ class _SosScreenState extends State<SosScreen>
 
 String _displayProfileValue(String value) =>
     value.trim().isEmpty ? 'Not provided' : value.trim();
-
-String? _optionalProfileValue(String value) =>
-    value.trim().isEmpty ? null : value.trim();
 
 // ─── Telemetry Single Row Widget ─────────────────────────────────────────────
 class _TelemetryRow extends StatelessWidget {

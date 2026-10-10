@@ -1,4 +1,10 @@
 # Miscellaneous
+venv/
+backend/.venv/
+backend/.env
+__pycache__/
+.pytest_cache/
+.ruff_cache/
 *.class
 *.log
 *.pyc

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../services/api_service.dart';
+
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
@@ -16,6 +18,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _mobile = TextEditingController();
   final _pass = TextEditingController();
   final _confirm = TextEditingController();
+  bool _busy = false;
+  bool _validatePasswords = false;
+
+  String? get _passwordError {
+    if (!_validatePasswords) return null;
+    final length = _pass.text.runes.length;
+    if (length < 12) return 'Use at least 12 characters.';
+    if (length > 128) return 'Use no more than 128 characters.';
+    return null;
+  }
+
+  String? get _confirmationError =>
+      _validatePasswords && _pass.text != _confirm.text
+      ? 'Passwords do not match.'
+      : null;
+
+  void _onEdit(String _) {
+    ScaffoldMessenger.of(context).clearSnackBars();
+    setState(() {});
+  }
+
   bool _hidePass = true, _hideConfirm = true, _agreed = false;
 
   @override
@@ -26,7 +49,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  void _register() {
+  Future<void> _register() async {
+    if (_busy) return;
     if (_name.text.trim().isEmpty ||
         _email.text.trim().isEmpty ||
         _mobile.text.trim().isEmpty ||
@@ -36,25 +60,46 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (_mobile.text.trim().length < 10) {
       return _snack('Enter a valid mobile number.', ok: false);
     }
-    if (_pass.text != _confirm.text) {
-      return _snack('Passwords do not match.', ok: false);
-    }
-    if (_pass.text.length < 8) {
-      return _snack('Password must be at least 8 characters.', ok: false);
-    }
+    setState(() => _validatePasswords = true);
+    if (_passwordError != null || _confirmationError != null) return;
     if (!_agreed) {
       return _snack('Please agree to the Terms & Privacy Policy.', ok: false);
     }
-    _snack('Account created successfully! 🎉', ok: true);
+    setState(() => _busy = true);
+    try {
+      await ApiService.instance.register(
+        email: _email.text,
+        fullName: _name.text,
+        emergencyContactPhone: _mobile.text,
+        password: _pass.text,
+      );
+      if (!mounted) return;
+      Navigator.pushNamedAndRemoveUntil(context, '/dashboard', (_) => false);
+    } catch (error) {
+      if (mounted) {
+        _snack(
+          error is ApiException
+              ? error.message
+              : 'Unable to create account. Please retry.',
+          ok: false,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
-  void _snack(String msg, {required bool ok}) => ScaffoldMessenger.of(context)
-      .showSnackBar(
+  void _snack(String msg, {required bool ok}) {
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
         SnackBar(
           content: Text(msg),
+          showCloseIcon: true,
           backgroundColor: ok ? Colors.green : Colors.red,
         ),
       );
+  }
 
   Widget _eyeIcon(bool hidden, VoidCallback onTap) => IconButton(
     onPressed: onTap,
@@ -72,12 +117,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
         Positioned.fill(child: CustomPaint(painter: _MountainPainter())),
         SafeArea(
           child: Center(
-            child: FittedBox(
-              fit: BoxFit.contain,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(vertical: 16),
               child: SizedBox(
                 width: 400,
-                height: 930,
+
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     const SizedBox(height: 18),
                     // ── Header
@@ -159,6 +205,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               _pass,
                               'Password',
                               Icons.lock_outline_rounded,
+                              helper: '12 to 128 characters',
+                              error: _passwordError,
                               obscure: _hidePass,
                               suffix: _eyeIcon(
                                 _hidePass,
@@ -170,6 +218,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               _confirm,
                               'Confirm Password',
                               Icons.lock_outline_rounded,
+                              error: _confirmationError,
                               obscure: _hideConfirm,
                               suffix: _eyeIcon(
                                 _hideConfirm,
@@ -240,33 +289,39 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               width: double.infinity,
                               height: 62,
                               child: ElevatedButton(
-                                onPressed: _register,
+                                onPressed: _busy ? null : _register,
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: _blue,
                                   foregroundColor: Colors.white,
                                   elevation: 0,
                                   shape: const StadiumBorder(),
                                 ),
-                                child: const Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      'Create Account',
-                                      style: TextStyle(
-                                        fontSize: 19,
-                                        fontWeight: FontWeight.w700,
+                                child: _busy
+                                    ? const CircularProgressIndicator()
+                                    : const Wrap(
+                                        alignment: WrapAlignment.center,
+                                        children: [
+                                          Text(
+                                            'Create Account',
+                                            style: TextStyle(
+                                              fontSize: 19,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                          SizedBox(width: 14),
+                                          Icon(
+                                            Icons.arrow_forward_rounded,
+                                            size: 26,
+                                          ),
+                                        ],
                                       ),
-                                    ),
-                                    SizedBox(width: 14),
-                                    Icon(Icons.arrow_forward_rounded, size: 26),
-                                  ],
-                                ),
                               ),
                             ),
                             const SizedBox(height: 20),
                             // Sign in row
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
+                            Wrap(
+                              alignment: WrapAlignment.center,
+                              crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
                                 const Text(
                                   'Already have an account? ',
@@ -311,17 +366,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
     String hint,
     IconData icon, {
     bool obscure = false,
+    String? helper,
+    String? error,
     Widget? suffix,
     TextInputType? type,
     List<TextInputFormatter>? formatters,
   }) => TextField(
     controller: ctrl,
+    onChanged: _onEdit,
+    autocorrect: ctrl != _pass && ctrl != _confirm,
+    enableSuggestions: ctrl != _pass && ctrl != _confirm,
     obscureText: obscure,
     keyboardType: type,
     inputFormatters: formatters,
     style: const TextStyle(fontSize: 17),
     decoration: InputDecoration(
       hintText: hint,
+      helperText: helper,
+      errorText: error,
       hintStyle: const TextStyle(color: Color(0xFF71809A), fontSize: 18),
       prefixIcon: Icon(icon, color: const Color(0xFF53647F)),
       suffixIcon: suffix,

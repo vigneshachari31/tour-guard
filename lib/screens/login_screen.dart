@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'dashboard_screen.dart';
+import '../services/api_service.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -14,6 +15,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _busy = false;
 
   @override
   void dispose() {
@@ -22,23 +24,33 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _login() {
-    final isValid =
-        _emailController.text.trim() == 'viggy@gmail.com' &&
-        _passwordController.text == '12345678';
-
-    if (isValid) {
-      Navigator.pushReplacement(
+  Future<void> _login() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await ApiService.instance.login(
+        email: _emailController.text,
+        password: _passwordController.text,
+      );
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const DashboardScreen()),
+        (_) => false,
       );
-    } else {
+    } catch (error) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Invalid email or password'),
-          backgroundColor: Colors.red,
+        SnackBar(
+          content: Text(
+            error is ApiException
+                ? error.message
+                : 'Unable to sign in. Please retry.',
+          ),
         ),
       );
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -65,7 +77,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       obscurePassword: _obscurePassword,
                       onTogglePassword: () =>
                           setState(() => _obscurePassword = !_obscurePassword),
-                      onLogin: _login,
+                      onLogin: _busy ? null : _login,
                       onCreateAccount: () => Navigator.push(
                         context,
                         PageRouteBuilder(
@@ -148,7 +160,7 @@ class _LoginCard extends StatelessWidget {
   final TextEditingController passwordController;
   final bool obscurePassword;
   final VoidCallback onTogglePassword;
-  final VoidCallback onLogin;
+  final VoidCallback? onLogin;
   final VoidCallback onCreateAccount;
 
   @override
@@ -212,17 +224,22 @@ class _LoginCard extends StatelessWidget {
               elevation: 0,
               shape: const StadiumBorder(),
             ),
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  'Login',
-                  style: TextStyle(fontSize: 21, fontWeight: FontWeight.w700),
-                ),
-                SizedBox(width: 14),
-                Icon(Icons.arrow_forward_rounded, size: 28),
-              ],
-            ),
+            child: onLogin == null
+                ? const CircularProgressIndicator()
+                : const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Login',
+                        style: TextStyle(
+                          fontSize: 21,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      SizedBox(width: 14),
+                      Icon(Icons.arrow_forward_rounded, size: 28),
+                    ],
+                  ),
           ),
         ),
         const SizedBox(height: 29),
