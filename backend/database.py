@@ -5,7 +5,10 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-from .config import get_settings
+try:
+    from .config import get_settings
+except ImportError:
+    from config import get_settings
 
 
 class Base(DeclarativeBase):
@@ -19,6 +22,9 @@ def get_engine() -> Engine:
         url = url.set(drivername="postgresql+psycopg")
     if url.get_backend_name() != "postgresql":
         raise ValueError("PostgreSQL with PostGIS is required")
+    connect_args: dict[str, object] = {"connect_timeout": 10}
+    if url.host and "-pooler" not in url.host and "neon.tech" not in url.host:
+        connect_args["options"] = "-c statement_timeout=15000"
     return create_engine(
         url,
         pool_pre_ping=True,
@@ -26,7 +32,7 @@ def get_engine() -> Engine:
         max_overflow=10,
         pool_timeout=10,
         hide_parameters=True,
-        connect_args={"connect_timeout": 5, "options": "-c statement_timeout=15000"},
+        connect_args=connect_args,
     )
 
 

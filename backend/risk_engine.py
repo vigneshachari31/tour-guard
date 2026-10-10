@@ -10,15 +10,26 @@ from pydantic import ValidationError
 from sqlalchemy import cast, func, select
 from sqlalchemy.orm import Session
 
-from .config import get_settings
-from .models import HazardZone
-from .schemas import (
-    HazardSummary,
-    RiskAssessment,
-    RouteGeometry,
-    RouteRequest,
-    WeatherObservation,
-)
+try:
+    from .config import get_settings
+    from .models import HazardZone
+    from .schemas import (
+        HazardSummary,
+        RiskAssessment,
+        RouteGeometry,
+        RouteRequest,
+        WeatherObservation,
+    )
+except ImportError:
+    from config import get_settings
+    from models import HazardZone
+    from schemas import (
+        HazardSummary,
+        RiskAssessment,
+        RouteGeometry,
+        RouteRequest,
+        WeatherObservation,
+    )
 
 
 def fetch_route(

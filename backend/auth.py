@@ -7,9 +7,14 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pwdlib import PasswordHash
 from sqlalchemy.orm import Session
 
-from .config import get_settings
-from .database import get_db
-from .models import User
+try:
+    from .config import get_settings
+    from .database import get_db
+    from .models import User
+except ImportError:
+    from config import get_settings
+    from database import get_db
+    from models import User
 
 password_hasher = PasswordHash.recommended()
 _dummy_hash = password_hasher.hash("dummy-password-for-timing-only")

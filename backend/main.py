@@ -11,20 +11,36 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from .auth import create_access_token, get_current_user, hash_password, verify_password
-from .config import get_settings
-from .database import get_db, get_engine
-from .models import SOSEvent, User
-from .risk_engine import assess_risk, fetch_route, nearby_hazards
-from .schemas import (
-    LoginRequest,
-    RegisterRequest,
-    RouteRequest,
-    RouteResponse,
-    SOSRequest,
-    SOSResponse,
-    TokenResponse,
-)
+try:
+    from .auth import create_access_token, get_current_user, hash_password, verify_password
+    from .config import get_settings
+    from .database import get_db, get_engine
+    from .models import SOSEvent, User
+    from .risk_engine import assess_risk, fetch_route, nearby_hazards
+    from .schemas import (
+        LoginRequest,
+        RegisterRequest,
+        RouteRequest,
+        RouteResponse,
+        SOSRequest,
+        SOSResponse,
+        TokenResponse,
+    )
+except ImportError:
+    from auth import create_access_token, get_current_user, hash_password, verify_password
+    from config import get_settings
+    from database import get_db, get_engine
+    from models import SOSEvent, User
+    from risk_engine import assess_risk, fetch_route, nearby_hazards
+    from schemas import (
+        LoginRequest,
+        RegisterRequest,
+        RouteRequest,
+        RouteResponse,
+        SOSRequest,
+        SOSResponse,
+        TokenResponse,
+    )
 
 logger = logging.getLogger(__name__)
 DB = Annotated[Session, Depends(get_db)]
