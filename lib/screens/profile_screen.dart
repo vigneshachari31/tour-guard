@@ -86,7 +86,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       debugPrint('Failed to save tourist profile: $error');
       if (!mounted) return;
       setState(() => _isSaving = false);
-      _showMessage('Could not save profile. Please try again.', isError: true);
+      _showMessage('Could not save profile. Please try agai.', isError: true);
     }
   }
 
