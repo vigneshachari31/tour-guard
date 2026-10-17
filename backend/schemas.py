@@ -111,3 +111,28 @@ class SOSResponse(BaseModel):
     status: Literal["active", "resolved"]
     created_at: datetime
     message: str = "SOS recorded. Responder dispatch is not confirmed."
+
+
+class ProfileUpdate(InputModel):
+    full_name: str | None = Field(default=None, max_length=255)
+    phone_number: str | None = Field(default=None, max_length=50, pattern=r"^$|^\+?[0-9][0-9 ()-]{6,49}$")
+    profile_picture_url: str | None = Field(default=None, pattern=r"^/api/v1/profile/avatar/[a-f0-9]{32}$")
+    blood_group: Literal["", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] | None = None
+    emergency_contact: str | None = Field(default=None, max_length=100)
+    medical_notes: str | None = Field(default=None, max_length=5000)
+    allergies: str | None = Field(default=None, max_length=5000)
+    email: EmailStr | None = None
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def trim_fields(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
+class ProfileResponse(ProfileUpdate):
+    user_id: int
+    email: EmailStr
+
+
+class AvatarUpload(InputModel):
+    image_base64: str = Field(min_length=1, max_length=2796204)

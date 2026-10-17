@@ -2,10 +2,15 @@ import 'package:flutter/material.dart';
 
 import 'package:flutter/services.dart';
 
-import '../services/tourist_profile_store.dart';
+import 'package:image_picker/image_picker.dart';
+
+import '../models/user_profile.dart';
+import '../services/api_service.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  final ApiService? api;
+  final Future<Uint8List?> Function()? pickAvatar;
+  const ProfileScreen({super.key, this.api, this.pickAvatar});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -23,6 +28,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   bool _isLoading = true;
   bool _isSaving = false;
+  bool _isUploading = false;
+  String? _loadError;
+  Uint8List? _avatar;
+  ApiService get _api => widget.api ?? ApiService.instance;
 
   @override
   void initState() {
@@ -42,51 +51,112 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
+  void _fill(UserProfile profile) {
+    _nameController.text = profile.name;
+    _emailController.text = profile.email;
+    _phoneController.text = profile.phone;
+    _bloodGroupController.text = profile.bloodGroup;
+    _emergencyContactController.text = profile.emergencyContact;
+    _medicalNotesController.text = profile.medicalNotes;
+    _allergiesController.text = profile.allergies;
+  }
+
+  void _handleError(Object error) {
+    _showMessage(
+      error is ApiException
+          ? error.message
+          : 'Unable to update profile. Please retry.',
+      isError: true,
+    );
+    if (error is ApiException && error.unauthorized) {
+      Navigator.pushNamedAndRemoveUntil(context, '/login', (_) => false);
+    }
+  }
+
   Future<void> _loadProfile() async {
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+      _avatar = null;
+    });
     try {
-      final profile = await TouristProfile.load();
+      final profile = await _api.getProfile();
       if (!mounted) return;
-      _nameController.text = profile.name;
-      _emailController.text = profile.email;
-      _phoneController.text = profile.phone;
-      _bloodGroupController.text = profile.bloodGroup;
-      _emergencyContactController.text = profile.emergencyContact;
-      _medicalNotesController.text = profile.medicalNotes;
-      _allergiesController.text = profile.allergies;
-      setState(() => _isLoading = false);
+      _fill(profile);
+      if (profile.pictureUrl != null) {
+        try {
+          final bytes = await _api.loadAvatar(profile.pictureUrl!);
+          if (mounted) setState(() => _avatar = bytes);
+        } catch (error) {
+          if (mounted) _handleError(error);
+        }
+      }
+      if (mounted) setState(() => _isLoading = false);
     } catch (error) {
-      debugPrint('Failed to load tourist profile: $error');
       if (!mounted) return;
-      setState(() => _isLoading = false);
-      _showMessage(
-        'Saved profile is unavailable. You can enter your details again.',
-        isInfo: true,
-      );
+      setState(() {
+        _isLoading = false;
+        _loadError = 'Could not load your profile.';
+      });
+      _handleError(error);
     }
   }
 
   Future<void> _saveProfile() async {
-    if (!_formKey.currentState!.validate()) return;
-
+    if (_isSaving || _isUploading || !_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
     try {
-      await TouristProfile(
-        name: _nameController.text,
-        email: _emailController.text,
-        phone: _phoneController.text,
-        bloodGroup: _bloodGroupController.text,
-        emergencyContact: _emergencyContactController.text,
-        medicalNotes: _medicalNotesController.text,
-        allergies: _allergiesController.text,
-      ).save();
+      final profile = await _api.updateProfile(
+        UserProfile(
+          name: _nameController.text,
+          email: _emailController.text,
+          phone: _phoneController.text,
+          bloodGroup: _bloodGroupController.text,
+          emergencyContact: _emergencyContactController.text,
+          medicalNotes: _medicalNotesController.text,
+          allergies: _allergiesController.text,
+        ),
+      );
       if (!mounted) return;
-      setState(() => _isSaving = false);
-      _showMessage('Profile saved on this device.');
+      setState(() => _fill(profile));
+      _showMessage('Profile saved to your account.');
     } catch (error) {
-      debugPrint('Failed to save tourist profile: $error');
+      if (mounted) _handleError(error);
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _uploadPhoto() async {
+    if (_isUploading || _isSaving) return;
+    setState(() => _isUploading = true);
+    try {
+      Uint8List? bytes;
+      if (widget.pickAvatar != null) {
+        bytes = await widget.pickAvatar!();
+      } else {
+        final image = await ImagePicker().pickImage(
+          source: ImageSource.gallery,
+          maxWidth: 1024,
+          maxHeight: 1024,
+          imageQuality: 85,
+        );
+        if (image == null) return;
+        if (await image.length() > 2 * 1024 * 1024) {
+          throw const ApiException('Choose an image smaller than 2 MB.');
+        }
+        bytes = await image.readAsBytes();
+      }
+      if (bytes == null || !mounted) return;
+      final profile = await _api.uploadAvatar(bytes);
+      final saved = await _api.loadAvatar(profile.pictureUrl!);
       if (!mounted) return;
-      setState(() => _isSaving = false);
-      _showMessage('Could not save profile. Please try agai.', isError: true);
+      setState(() => _avatar = saved);
+      _showMessage('Profile photo saved.');
+    } catch (error) {
+      if (mounted) _handleError(error);
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
     }
   }
 
@@ -112,6 +182,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return SafeArea(
       child: _isLoading
           ? const Center(child: CircularProgressIndicator())
+          : _loadError != null
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(_loadError!),
+                  TextButton(
+                    onPressed: _loadProfile,
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            )
           : SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(18, 20, 18, 28),
               child: Form(
@@ -145,21 +228,67 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       child: Column(
                         children: [
-                          CircleAvatar(
-                            radius: 38,
-                            backgroundColor: const Color(0xFFE8F3FF),
-                            child: Text(
-                              _nameController.text.trim().isEmpty
-                                  ? '?'
-                                  : _nameController.text
-                                        .trim()[0]
-                                        .toUpperCase(),
-                              style: const TextStyle(
-                                fontSize: 30,
-                                fontWeight: FontWeight.w800,
-                                color: Color(0xFF087CF0),
+                          Stack(
+                            children: [
+                              InkWell(
+                                onTap: _isUploading || _isSaving
+                                    ? null
+                                    : _uploadPhoto,
+                                child: ClipOval(
+                                  child: SizedBox(
+                                    width: 76,
+                                    height: 76,
+                                    child: _isUploading
+                                        ? const Center(
+                                            child: CircularProgressIndicator(),
+                                          )
+                                        : _avatar != null
+                                        ? Image.memory(
+                                            _avatar!,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, _, _) =>
+                                                const Icon(
+                                                  Icons.person,
+                                                  size: 40,
+                                                ),
+                                          )
+                                        : CircleAvatar(
+                                            radius: 38,
+                                            backgroundColor: const Color(
+                                              0xFFE8F3FF,
+                                            ),
+                                            child: Text(
+                                              _nameController.text
+                                                      .trim()
+                                                      .isEmpty
+                                                  ? '?'
+                                                  : _nameController.text
+                                                        .trim()[0]
+                                                        .toUpperCase(),
+                                              style: const TextStyle(
+                                                fontSize: 30,
+                                                color: Color(0xFF087CF0),
+                                              ),
+                                            ),
+                                          ),
+                                  ),
+                                ),
                               ),
-                            ),
+                              Positioned(
+                                right: 0,
+                                bottom: 0,
+                                child: IconButton(
+                                  tooltip: 'Edit profile photo',
+                                  onPressed: _isUploading || _isSaving
+                                      ? null
+                                      : _uploadPhoto,
+                                  icon: const Icon(
+                                    Icons.edit,
+                                    color: Color(0xFF087CF0),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 10),
                           Text(
@@ -201,6 +330,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       label: 'Email address',
                       icon: Icons.mail_outline_rounded,
                       keyboardType: TextInputType.emailAddress,
+                      validator: (v) => v == null || !v.contains('@')
+                          ? 'Enter a valid email address'
+                          : null,
                     ),
                     _textField(
                       controller: _phoneController,
@@ -259,7 +391,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Saved on this device only—not synced to an account or cloud. This prototype does not encrypt profile details.',
+                              'Your profile is saved to your account. Changing your email also changes your sign-in email.',
                               style: TextStyle(
                                 fontSize: 12,
                                 height: 1.35,
@@ -275,7 +407,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       width: double.infinity,
                       height: 52,
                       child: ElevatedButton.icon(
-                        onPressed: _isSaving ? null : _saveProfile,
+                        onPressed: _isSaving || _isUploading
+                            ? null
+                            : _saveProfile,
                         icon: _isSaving
                             ? const SizedBox(
                                 width: 18,
@@ -328,6 +462,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       padding: const EdgeInsets.only(bottom: 12),
       child: TextFormField(
         controller: controller,
+        enabled: !_isSaving && !_isUploading,
         keyboardType: keyboardType,
         maxLines: maxLines,
         inputFormatters: inputFormatters,

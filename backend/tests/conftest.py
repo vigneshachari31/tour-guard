@@ -13,7 +13,7 @@ from sqlalchemy.pool import StaticPool
 
 from backend.database import get_db
 from backend.main import create_app
-from backend.models import SOSEvent, User
+from backend.models import SOSEvent, User, UserProfile
 
 
 @pytest.fixture
@@ -23,6 +23,7 @@ def client():
     )
     # SQLite is only used for auth/SOS unit tests, never for spatial verification.
     User.__table__.create(engine)
+    UserProfile.__table__.create(engine)
     SOSEvent.__table__.create(engine)
     app = create_app()
 

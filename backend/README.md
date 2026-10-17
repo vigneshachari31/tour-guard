@@ -149,7 +149,32 @@ References: [FastAPI authentication](https://fastapi.tiangolo.com/tutorial/secur
 [OSRM route API](https://project-osrm.org/docs/v5.22.0/api/),
 [PostGIS ST_DWithin](https://postgis.net/docs/ST_DWithin.html).
 
-## Test isolation
+## Account profiles
+
+Apply `backend/.venv/Scripts/python -m alembic -c backend/alembic.ini upgrade head`
+after installing backend requirements. Migration 0004 adds profile/avatar storage
+without deleting account data. Restart the API and Flutter app after installing
+the new Pillow and image_picker dependencies.
+
+Authenticated endpoints:
+- `GET /api/v1/profile/me`: saved profile, with signup name/mobile as initial defaults.
+- `PUT /api/v1/profile/me`: saves profile fields; omitted fields are preserved.
+  Email changes update the login email and duplicates return 409.
+- `POST /api/v1/profile/upload-avatar`: JSON `{"image_base64":"..."}` containing
+  raw base64 for a JPEG, PNG, or WebP image (maximum 2 MB, 16 million pixels).
+  Images are resized to at most 1024 pixels and re-encoded as JPEG.
+- The returned avatar path requires the owner's Bearer token. Image bytes are
+  stored in PostgreSQL and are not exposed through a public uploads directory.
+
+The new profile mobile number is in `user_profiles.phone_number`; no separate
+phone column is added to `users`. The signup mapping remains unchanged.
+Existing device-only profile details are not imported automatically because that
+cache was not account-scoped. Enter those details once in the signed-in profile.
+
+Profile tests use the isolated SQLite fixture and mocked Flutter HTTP calls;
+they do not create test accounts in the main database.
+
+## Test database safeguards
 
 Registration tests run in isolated in-memory SQLite, never through the running
 API. RUN_LIVE_AUTH_TESTS no longer enables live writes. PostGIS tests only accept

@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 try:
+    from .routers.profile import router as profile_router
     from .auth import create_access_token, get_current_user, hash_password, verify_password
     from .config import get_settings
     from .database import get_db, get_engine
@@ -27,6 +28,7 @@ try:
         TokenResponse,
     )
 except ImportError:
+    from routers.profile import router as profile_router
     from auth import create_access_token, get_current_user, hash_password, verify_password
     from config import get_settings
     from database import get_db, get_engine
@@ -85,9 +87,11 @@ def create_app() -> FastAPI:
             r"http://(?:localhost|127\.0\.0\.1)(?::[0-9]{1,5})?"
             if settings.cors_allow_localhost else None
         ),
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "PUT"],
         allow_headers=["Authorization", "Content-Type"],
     )
+
+    app.include_router(profile_router)
 
     @app.exception_handler(SQLAlchemyError)
     async def database_error(request: Request, exc: SQLAlchemyError) -> JSONResponse:

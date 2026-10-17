@@ -8,7 +8,9 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
+    Text,
     cast,
     func,
 )
@@ -82,3 +84,18 @@ class SOSEvent(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class UserProfile(Base):
+    __tablename__ = "user_profiles"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)
+    full_name: Mapped[str | None] = mapped_column(String(255))
+    phone_number: Mapped[str | None] = mapped_column(String(50))
+    profile_picture_url: Mapped[str | None] = mapped_column(Text)
+    blood_group: Mapped[str | None] = mapped_column(String(10))
+    emergency_contact: Mapped[str | None] = mapped_column(String(100))
+    medical_notes: Mapped[str | None] = mapped_column(Text)
+    allergies: Mapped[str | None] = mapped_column(Text)
+    avatar_data: Mapped[bytes | None] = mapped_column(LargeBinary)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(), server_default=func.now(), onupdate=func.now())

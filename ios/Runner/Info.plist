@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Select a photo for your Tour Guard profile.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Tour Guard needs your live GPS location to monitor travel hazard risks and provide safe routing.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

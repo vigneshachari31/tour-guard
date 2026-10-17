@@ -7,6 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/route_response.dart';
+import '../models/user_profile.dart';
 
 class ApiException implements Exception {
   final String message;
@@ -220,26 +221,62 @@ class ApiService {
     }
   }
 
+  Future<UserProfile> getProfile() async =>
+      UserProfile.fromJson(await _post('/profile/me', {}, method: 'GET'));
+
+  Future<UserProfile> updateProfile(UserProfile profile) async =>
+      UserProfile.fromJson(
+        await _post('/profile/me', profile.toJson(), method: 'PUT'),
+      );
+
+  Future<UserProfile> uploadAvatar(Uint8List bytes) async {
+    if (bytes.length > 2 * 1024 * 1024) {
+      throw const ApiException('Choose an image smaller than 2 MB.');
+    }
+    return UserProfile.fromJson(
+      await _post('/profile/upload-avatar', {
+        'image_base64': base64Encode(bytes),
+      }),
+    );
+  }
+
+  Future<Uint8List> loadAvatar(String path) async {
+    if (!RegExp(r'^/api/v1/profile/avatar/[a-f0-9]{32}$').hasMatch(path)) {
+      throw const ApiException(
+        'Invalid profile photo address. Please upload the photo again.',
+      );
+    }
+    final result = await _post(
+      path.substring('/api/v1'.length),
+      {},
+      method: 'GET',
+      binary: true,
+    );
+    return result['bytes'] as Uint8List;
+  }
+
   Future<Map<String, dynamic>> _post(
     String path,
     Map<String, dynamic> body, {
     bool authenticated = true,
+    String method = 'POST',
+    bool binary = false,
   }) async {
     final token = authenticated ? await getToken() : null;
     if (authenticated && token == null) {
       throw const ApiException('Please sign in to continue.', statusCode: 401);
     }
     try {
+      final request = http.Request(method, Uri.parse('$baseUrl$path'));
+      request.headers.addAll({
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      });
+      if (method != 'GET') request.body = jsonEncode(body);
       final response = await _client
-          .post(
-            Uri.parse('$baseUrl$path'),
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-              if (token != null) 'Authorization': 'Bearer $token',
-            },
-            body: jsonEncode(body),
-          )
+          .send(request)
+          .then(http.Response.fromStream)
           .timeout(timeout);
       if (response.statusCode == 401) {
         if (authenticated && await getToken() == token) await logout();
@@ -249,6 +286,9 @@ class ApiService {
               : 'Invalid email or password.',
           statusCode: 401,
         );
+      }
+      if (binary && response.statusCode >= 200 && response.statusCode < 300) {
+        return {'bytes': response.bodyBytes};
       }
       dynamic data;
       try {

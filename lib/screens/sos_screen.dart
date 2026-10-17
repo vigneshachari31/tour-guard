@@ -6,7 +6,7 @@ import 'package:latlong2/latlong.dart';
 import '../services/api_service.dart';
 import '../services/current_location.dart';
 import '../services/routing_service.dart';
-import '../services/tourist_profile_store.dart';
+import '../models/user_profile.dart';
 
 // ==============================================================================
 // 🚨 SMART RESCUE & EMERGENCY SOS SCREEN (TOUR GUARD)
@@ -46,8 +46,8 @@ class _SosScreenState extends State<SosScreen>
   String _localityName = 'Location unavailable';
   bool _isLoadingGps = true;
 
-  // Profile values are stored locally until account-backed profiles exist.
-  TouristProfile _touristProfile = const TouristProfile();
+  // Load only the authenticated account profile; never use another account's device cache.
+  UserProfile _touristProfile = const UserProfile();
 
   @override
   void initState() {
@@ -69,7 +69,7 @@ class _SosScreenState extends State<SosScreen>
 
   Future<void> _loadTouristProfile() async {
     try {
-      final profile = await TouristProfile.load();
+      final profile = await ApiService.instance.getProfile();
       if (mounted) setState(() => _touristProfile = profile);
     } catch (error) {
       debugPrint('Failed to load tourist profile for SOS: $error');
