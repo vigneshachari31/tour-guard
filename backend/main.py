@@ -1,44 +1,60 @@
 import logging
 from contextlib import asynccontextmanager
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import uuid4
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
-try:
-    from .routers.profile import router as profile_router
-    from .auth import create_access_token, get_current_user, hash_password, verify_password
+if __package__:
+    from .auth import (
+        create_access_token,
+        get_current_user,
+        hash_password,
+        verify_password,
+    )
     from .config import get_settings
     from .database import get_db, get_engine
-    from .models import SOSEvent, User
+    from .models import HazardZone, SOSEvent, User
     from .risk_engine import assess_risk, fetch_route, nearby_hazards
+    from .routers.profile import router as profile_router
     from .schemas import (
+        HazardReportRequest,
+        HazardReportResponse,
         LoginRequest,
         RegisterRequest,
         RouteRequest,
         RouteResponse,
+        SOSEventsListResponse,
         SOSRequest,
         SOSResponse,
         TokenResponse,
     )
-except ImportError:
-    from routers.profile import router as profile_router
-    from auth import create_access_token, get_current_user, hash_password, verify_password
+else:
+    from auth import (
+        create_access_token,
+        get_current_user,
+        hash_password,
+        verify_password,
+    )
     from config import get_settings
     from database import get_db, get_engine
-    from models import SOSEvent, User
+    from models import HazardZone, SOSEvent, User
     from risk_engine import assess_risk, fetch_route, nearby_hazards
+    from routers.profile import router as profile_router
     from schemas import (
+        HazardReportRequest,
+        HazardReportResponse,
         LoginRequest,
         RegisterRequest,
         RouteRequest,
         RouteResponse,
+        SOSEventsListResponse,
         SOSRequest,
         SOSResponse,
         TokenResponse,
@@ -199,6 +215,61 @@ def create_app() -> FastAPI:
         db.commit()
         db.refresh(event)
         return event
+
+    @app.get(
+        "/api/v1/sos/events",
+        response_model=SOSEventsListResponse,
+        tags=["SOS"],
+    )
+    def list_sos_events(
+        user: CurrentUser,
+        db: DB,
+        status: Literal["active", "resolved"] | None = "active",
+    ) -> SOSEventsListResponse:
+        stmt = select(SOSEvent)
+        if status:
+            stmt = stmt.where(SOSEvent.status == status)
+        stmt = stmt.order_by(SOSEvent.created_at.desc()).limit(100)
+        events = list(db.scalars(stmt).all())
+        return SOSEventsListResponse(
+            events=[SOSResponse.model_validate(e) for e in events],
+            total=len(events),
+        )
+
+    @app.post(
+        "/api/v1/hazards/report",
+        response_model=HazardReportResponse,
+        status_code=201,
+        tags=["Hazards"],
+    )
+    def report_hazard(
+        body: HazardReportRequest,
+        user: CurrentUser,
+        db: DB,
+    ) -> HazardReportResponse:
+        geom = func.ST_SetSRID(
+            func.ST_MakePoint(body.longitude, body.latitude), 4326
+        )
+        hazard = HazardZone(
+            name=body.name,
+            hazard_type=body.hazard_type,
+            severity=body.severity,
+            geometry=geom,
+            source=f"Tourist Report ({user.tourist_id})",
+        )
+        db.add(hazard)
+        db.commit()
+        db.refresh(hazard)
+        return HazardReportResponse(
+            id=hazard.id,
+            name=hazard.name,
+            hazard_type=hazard.hazard_type,
+            severity=hazard.severity,
+            latitude=body.latitude,
+            longitude=body.longitude,
+            source=hazard.source,
+            updated_at=hazard.updated_at,
+        )
 
     return app
 

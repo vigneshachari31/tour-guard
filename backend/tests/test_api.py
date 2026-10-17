@@ -59,6 +59,26 @@ def test_register_login_duplicate_and_persisted_sos(client):
         == 403
     )
 
+    # Active SOS retrieval for rescue dashboard
+    sos_list = client.get("/api/v1/sos/events", headers=headers)
+    assert sos_list.status_code == 200
+    assert sos_list.json()["total"] >= 1
+    assert sos_list.json()["events"][0]["latitude"] == 11.4
+    assert sos_list.json()["events"][0]["status"] == "active"
+    assert sos_list.json()["events"][0]["created_at"]
+
+    # Hazard reporting requires authentication
+    assert client.post(
+        "/api/v1/hazards/report",
+        json={
+            "name": "Fallen boulder on highway",
+            "hazard_type": "landslide",
+            "severity": 4,
+            "latitude": 11.41,
+            "longitude": 76.69,
+        },
+    ).status_code == 401
+
 
 def test_expired_token_and_coordinate_validation(client):
     account = register(client)

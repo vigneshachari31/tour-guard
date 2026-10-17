@@ -113,6 +113,32 @@ class SOSResponse(BaseModel):
     message: str = "SOS recorded. Responder dispatch is not confirmed."
 
 
+class SOSEventsListResponse(BaseModel):
+    events: list[SOSResponse]
+    total: int
+
+
+class HazardReportRequest(InputModel):
+    name: str = Field(min_length=3, max_length=200)
+    hazard_type: str = Field(min_length=3, max_length=50)
+    severity: int = Field(ge=1, le=5)
+    latitude: Latitude
+    longitude: Longitude
+
+
+class HazardReportResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    hazard_type: str
+    severity: int
+    latitude: float
+    longitude: float
+    source: str | None
+    updated_at: datetime | None
+    message: str = "Hazard report recorded into spatial database."
+
+
 class ProfileUpdate(InputModel):
     full_name: str | None = Field(default=None, max_length=255)
     phone_number: str | None = Field(default=None, max_length=50, pattern=r"^$|^\+?[0-9][0-9 ()-]{6,49}$")

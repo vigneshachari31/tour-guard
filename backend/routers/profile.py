@@ -13,12 +13,12 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-try:
+if __package__ and "." in __package__:
     from ..auth import get_current_user
     from ..database import get_db
     from ..models import User, UserProfile
     from ..schemas import AvatarUpload, ProfileResponse, ProfileUpdate
-except ImportError:
+else:
     from auth import get_current_user
     from database import get_db
     from models import User, UserProfile

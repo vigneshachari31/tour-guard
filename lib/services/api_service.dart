@@ -221,6 +221,31 @@ class ApiService {
     }
   }
 
+  Future<List<Map<String, dynamic>>> getActiveSosEvents() async {
+    final response = await _post('/sos/events', {}, method: 'GET');
+    final events = response['events'];
+    if (events is List) {
+      return events.whereType<Map<String, dynamic>>().toList();
+    }
+    return [];
+  }
+
+  Future<Map<String, dynamic>> reportHazard({
+    required String name,
+    required String hazardType,
+    required int severity,
+    required double latitude,
+    required double longitude,
+  }) async {
+    return await _post('/hazards/report', {
+      'name': name,
+      'hazard_type': hazardType,
+      'severity': severity,
+      'latitude': latitude,
+      'longitude': longitude,
+    });
+  }
+
   Future<UserProfile> getProfile() async =>
       UserProfile.fromJson(await _post('/profile/me', {}, method: 'GET'));
 

@@ -18,12 +18,11 @@ samples, guidance on mobile development, and a full API reference.
 
 ## Run the Tour Guard backend
 
-Start the FastAPI service from the `backend` directory:
+Install the backend dependencies and start the FastAPI service from the repository root:
 
 ```powershell
-cd backend
-pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 8000
+python -m pip install -r backend/requirements-v1.txt
+python -m uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 The API documentation is available at `http://localhost:8000/docs`.

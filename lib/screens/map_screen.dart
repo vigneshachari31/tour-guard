@@ -17,7 +17,7 @@ import '../services/routing_service.dart';
 
 class MapScreen extends StatefulWidget {
   final String? initialDestination;
-
+  final bool trackGpsOnStart;
   final ValueChanged<RouteResponse?>? onAnalyzed;
   final ApiService? api;
   final Future<List<LocationSearchResult>> Function(String)? searchPlaces;
@@ -25,6 +25,7 @@ class MapScreen extends StatefulWidget {
   const MapScreen({
     super.key,
     this.initialDestination,
+    this.trackGpsOnStart = false,
     this.onAnalyzed,
     this.api,
     this.searchPlaces,
@@ -84,6 +85,12 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void initState() {
     super.initState();
+
+    if (widget.trackGpsOnStart ||
+        (widget.initialDestination != null &&
+            widget.initialDestination!.isNotEmpty)) {
+      _initMobileGpsTracking();
+    }
 
     if (widget.initialDestination != null &&
         widget.initialDestination!.isNotEmpty) {
