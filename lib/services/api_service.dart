@@ -7,6 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/route_response.dart';
+import '../state/active_trip_state.dart';
 import '../models/user_profile.dart';
 
 class ApiException implements Exception {
@@ -116,7 +117,11 @@ class ApiService {
   }
 
   Future<String?> getToken() async => (await getSession())?.accessToken;
-  Future<void> logout() => _store.clear();
+  Future<void> logout() async {
+    ActiveTripState.instance.clear();
+    await _store.clear();
+  }
+
   void close() => _client.close();
 
   Future<AuthSession> login({
@@ -153,6 +158,7 @@ class ApiService {
     try {
       final session = AuthSession.fromJson(json);
       await _store.write(jsonEncode(session.toJson()));
+      ActiveTripState.instance.clear();
       return session;
     } on PlatformException {
       throw const ApiException(

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -6,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:travel_risk_app/screens/map_screen.dart';
+import 'package:travel_risk_app/state/active_trip_state.dart';
+import 'package:travel_risk_app/screens/dashboard_screen.dart';
 import 'package:travel_risk_app/services/api_service.dart';
 import 'package:travel_risk_app/services/routing_service.dart';
 
@@ -30,12 +33,92 @@ class BlankTiles extends TileProvider {
 }
 
 void main() {
+  testWidgets(
+    'Ending a trip cancels a pending analysis and clears map fields',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final trips = ActiveTripState();
+      final response = Completer<http.Response>();
+      var requested = false;
+      final api = ApiService(
+        store: MemorySession(),
+        client: MockClient((_) {
+          requested = true;
+          return response.future;
+        }),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MapScreen(
+            api: api,
+            tripState: trips,
+            tileProvider: BlankTiles(),
+            searchPlaces: (query) async => [
+              LocationSearchResult(
+                displayName: '$query Place',
+                latitude: query == 'Origin' ? 11.4 : 11.5,
+                longitude: 76.7,
+              ),
+            ],
+          ),
+        ),
+      );
+      for (var i = 0; i < 2; i++) {
+        final name = i == 0 ? 'Origin' : 'Destination';
+        await tester.enterText(find.byType(TextField).at(i), name);
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pump();
+        await tester.tap(find.text('$name Place'));
+        await tester.pump();
+      }
+      expect(requested, isTrue);
+      trips.clear();
+      response.complete(
+        http.Response(
+          jsonEncode({
+            'geometry': {
+              'type': 'LineString',
+              'coordinates': [
+                [76.7, 11.4],
+                [76.7, 11.5],
+              ],
+            },
+            'distance_meters': 3300,
+            'duration_seconds': 300,
+            'buffer_meters': 250,
+            'hazards': [],
+            'assessment': {
+              'level': 'SAFE',
+              'method': 'heuristic_v1',
+              'reasons': [],
+              'limitations': [],
+              'weather_used': false,
+            },
+          }),
+          200,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(trips.trip, isNull);
+      expect(find.byType(PolylineLayer), findsNothing);
+      for (final field in tester.widgetList<TextField>(
+        find.byType(TextField),
+      )) {
+        expect(field.controller!.text, isEmpty);
+      }
+      await tester.pumpWidget(const SizedBox());
+      api.close();
+    },
+  );
+
   for (final fails in [false, true]) {
     testWidgets(
       'Manual source/destination; API failure=$fails keeps map truthful',
       (tester) async {
         await tester.binding.setSurfaceSize(const Size(1200, 1000));
         addTearDown(() => tester.binding.setSurfaceSize(null));
+        final trips = ActiveTripState();
         Map<String, dynamic>? sent;
         final api = ApiService(
           store: MemorySession(),
@@ -82,6 +165,7 @@ void main() {
           MaterialApp(
             home: MapScreen(
               api: api,
+              tripState: trips,
               tileProvider: BlankTiles(),
               searchPlaces: (query) async => [
                 LocationSearchResult(
@@ -117,6 +201,7 @@ void main() {
         });
         expect(find.byType(FlutterMap), findsOneWidget);
         if (fails) {
+          expect(trips.trip, isNull);
           expect(find.text('Routing unavailable'), findsOneWidget);
           expect(find.byType(PolylineLayer), findsNothing);
           expect(find.text('SAFE'), findsNothing);
@@ -124,6 +209,9 @@ void main() {
           final layer = tester.widget<PolylineLayer>(
             find.byType(PolylineLayer),
           );
+          expect(trips.trip?.originName, 'Ooty Source');
+          expect(trips.trip?.destinationName, 'Pykara Destination');
+          expect(trips.trip?.riskLevel, 'HIGH RISK');
           expect(layer.polylines.first.points.length, 3);
           expect(layer.polylines.first.points[1].longitude, 76.65);
           expect(find.text('HIGH RISK'), findsOneWidget);
@@ -140,6 +228,47 @@ void main() {
         }
         await tester.pumpWidget(const SizedBox());
         await tester.pump();
+        if (!fails) {
+          // Draft edits must not discard the last successfully assessed trip.
+          expect(trips.trip?.originName, 'Ooty Source');
+          await tester.pumpWidget(
+            MaterialApp(
+              home: MapScreen(
+                api: api,
+                tripState: trips,
+                tileProvider: BlankTiles(),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('Ooty Source'), findsWidgets);
+          expect(find.text('Pykara Destination'), findsWidgets);
+          expect(find.byType(PolylineLayer), findsOneWidget);
+          await tester.pumpWidget(const SizedBox());
+          await tester.pumpWidget(
+            MaterialApp(home: DashboardScreen(tripState: trips)),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find.text('Ooty Source \u2794 Pykara Destination'),
+            findsOneWidget,
+          );
+          expect(find.text('HIGH RISK'), findsOneWidget);
+          expect(find.text('12.0 km \u2022 30 mins'), findsOneWidget);
+          final fields = tester
+              .widgetList<TextField>(find.byType(TextField))
+              .toList();
+          expect(fields[0].controller!.text, 'Ooty Source');
+          expect(fields[1].controller!.text, 'Pykara Destination');
+          await tester.ensureVisible(find.text('END TRIP'));
+          await tester.tap(find.text('END TRIP'));
+          await tester.pumpAndSettle();
+          expect(trips.trip, isNull);
+          expect(fields[0].controller!.text, isEmpty);
+          expect(fields[1].controller!.text, isEmpty);
+          expect(find.text('HIGH RISK'), findsNothing);
+          await tester.pumpWidget(const SizedBox());
+        }
         expect(tester.takeException(), isNull);
         api.close();
       },

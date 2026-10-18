@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 import '../services/api_service.dart';
 import '../services/current_location.dart';
 import '../models/route_response.dart';
+import '../state/active_trip_state.dart';
 import '../services/routing_service.dart';
 
 // ==============================================================================
@@ -16,6 +17,7 @@ import '../services/routing_service.dart';
 // ==============================================================================
 
 class MapScreen extends StatefulWidget {
+  final ActiveTripState? tripState;
   final String? initialDestination;
   final bool trackGpsOnStart;
   final ValueChanged<RouteResponse?>? onAnalyzed;
@@ -24,6 +26,7 @@ class MapScreen extends StatefulWidget {
   final TileProvider? tileProvider;
   const MapScreen({
     super.key,
+    this.tripState,
     this.initialDestination,
     this.trackGpsOnStart = false,
     this.onAnalyzed,
@@ -41,6 +44,8 @@ class _MapScreenState extends State<MapScreen> {
   final MapController _mapController = MapController();
   final TextEditingController _sourceController = TextEditingController();
   final TextEditingController _destinationController = TextEditingController();
+
+  ActiveTripState get _trips => widget.tripState ?? ActiveTripState.instance;
 
   // Coordinates
   LatLng? _userGpsLocation;
@@ -85,9 +90,25 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void initState() {
     super.initState();
+    final trip = _trips.trip;
+    if (trip != null) {
+      _sourceName = trip.originName;
+      _destinationName = trip.destinationName;
+      _sourceController.text = trip.originName;
+      _destinationController.text = trip.destinationName;
+      _sourceLocation = trip.origin;
+      _destinationLocation = trip.destination;
+      _routeRisk = trip.route;
+      _routePoints = trip.route.points;
+      _routeDistanceKm = trip.distance / 1000;
+      _routeDurationMin = trip.duration / 60;
+      _nearbyHazards = trip.route.hazards;
+    }
 
+    _trips.addListener(_onTripCleared);
     if (widget.trackGpsOnStart ||
-        (widget.initialDestination != null &&
+        (_sourceLocation == null &&
+            widget.initialDestination != null &&
             widget.initialDestination!.isNotEmpty)) {
       _initMobileGpsTracking();
     }
@@ -101,11 +122,32 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   void dispose() {
+    _trips.removeListener(_onTripCleared);
     _debounceTimer?.cancel();
     _mapController.dispose();
     _sourceController.dispose();
     _destinationController.dispose();
     super.dispose();
+  }
+
+  void _onTripCleared() {
+    if (!mounted || _trips.trip != null) return;
+    _gpsRequestId++;
+    _searchRequestId++;
+    _debounceTimer?.cancel();
+    setState(() {
+      _invalidateRoute();
+      _sourceController.clear();
+      _destinationController.clear();
+      _sourceLocation = null;
+      _destinationLocation = null;
+      _sourceName = 'My Location';
+      _destinationName = null;
+      _sourceSuggestions = [];
+      _destinationSuggestions = [];
+      _isSearching = false;
+      _isLoadingGps = false;
+    });
   }
 
   Future<List<LocationSearchResult>> _searchPlaces(String query) =>
@@ -179,6 +221,20 @@ class _MapScreenState extends State<MapScreen> {
         _destinationName = name;
         _destinationController.text = name;
       });
+      final trip = _trips.trip;
+      if (trip != null &&
+          identical(trip.route, _routeRisk) &&
+          trip.destination == tappedPoint) {
+        _trips.start(
+          ActiveTrip(
+            originName: trip.originName,
+            destinationName: name,
+            origin: trip.origin,
+            destination: trip.destination,
+            route: trip.route,
+          ),
+        );
+      }
     }
   }
 
@@ -272,6 +328,8 @@ class _MapScreenState extends State<MapScreen> {
     _debounceTimer?.cancel();
     final requestId = ++_searchRequestId;
     setState(() {
+      _invalidateRoute();
+      _destinationLocation = null;
       _isSearching = true;
       _destinationSuggestions = [];
     });
@@ -369,6 +427,7 @@ class _MapScreenState extends State<MapScreen> {
     final end = _destinationLocation;
     if (start == null || end == null) return;
     final requestId = ++_routeRequestId;
+    final tripRevision = _trips.revision;
     setState(() {
       _isCalculatingRoute = true;
       _isLoadingRisk = true;
@@ -381,7 +440,11 @@ class _MapScreenState extends State<MapScreen> {
         destLat: end.latitude,
         destLng: end.longitude,
       );
-      if (!mounted || requestId != _routeRequestId) return;
+      if (!mounted ||
+          requestId != _routeRequestId ||
+          tripRevision != _trips.revision) {
+        return;
+      }
       setState(() {
         _routePoints = result.points;
         _routeDistanceKm = result.distanceMeters / 1000;
@@ -389,6 +452,15 @@ class _MapScreenState extends State<MapScreen> {
         _routeRisk = result;
         _nearbyHazards = result.hazards;
       });
+      _trips.start(
+        ActiveTrip(
+          originName: _sourceName,
+          destinationName: _destinationName ?? _destinationController.text,
+          origin: start,
+          destination: end,
+          route: result,
+        ),
+      );
       _fitRouteBounds();
       widget.onAnalyzed?.call(result);
     } catch (error) {
@@ -561,6 +633,7 @@ class _MapScreenState extends State<MapScreen> {
             mapController: _mapController,
             options: MapOptions(
               initialCenter: effectiveSource,
+              onMapReady: _fitRouteBounds,
               initialZoom: 14.5,
               minZoom: 3.0,
               maxZoom: 18.0,

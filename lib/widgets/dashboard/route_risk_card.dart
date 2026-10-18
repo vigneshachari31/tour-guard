@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../../models/route_response.dart';
+import '../../state/active_trip_state.dart';
 
 class RouteRiskCard extends StatelessWidget {
   final RouteResponse? route;
-  const RouteRiskCard({super.key, this.route});
+  final ActiveTrip? trip;
+  final VoidCallback? onEndTrip;
+  const RouteRiskCard({super.key, this.route, this.trip, this.onEndTrip});
 
   @override
   Widget build(BuildContext context) {
-    final result = route;
+    final result = trip?.route ?? route;
     final color = switch (result?.riskLevel) {
       'SAFE' => Colors.green,
       'CAUTION' => Colors.orange,
@@ -21,20 +24,37 @@ class RouteRiskCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              result?.riskLevel ?? 'Route not assessed',
-              style: TextStyle(
-                color: color,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
+            if (trip != null) ...[
+              Text(
+                '${trip!.originName} ➔ ${trip!.destinationName}',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
+              const SizedBox(height: 10),
+            ],
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Chip(
+                  backgroundColor: color.withValues(alpha: .12),
+                  label: Text(
+                    result?.riskLevel ?? 'Route not assessed',
+                    style: TextStyle(color: color, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                if (result != null)
+                  Text(
+                    '${(result.distanceMeters / 1000).toStringAsFixed(1)} km • ${(result.durationSeconds / 60).ceil()} mins',
+                  ),
+              ],
             ),
             if (result == null)
               const Text('Search for a destination to assess your route.')
             else ...[
-              Text(
-                '${(result.distanceMeters / 1000).toStringAsFixed(1)} km • ${(result.durationSeconds / 60).ceil()} min',
-              ),
               const Text('Heuristic assessment of available hazard data'),
               for (final reason in result.reasons) Text(reason),
               for (final hazard in result.hazards)
@@ -44,6 +64,14 @@ class RouteRiskCard extends StatelessWidget {
               if (!result.weatherUsed)
                 const Text('Weather was not included in this assessment.'),
               for (final limitation in result.limitations) Text(limitation),
+              if (trip != null && onEndTrip != null) ...[
+                const SizedBox(height: 8),
+                TextButton.icon(
+                  onPressed: onEndTrip,
+                  icon: const Icon(Icons.stop_circle_outlined),
+                  label: const Text('END TRIP'),
+                ),
+              ],
             ],
           ],
         ),

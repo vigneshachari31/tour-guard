@@ -8,7 +8,7 @@ import '../services/current_location.dart';
 import '../widgets/dashboard/dashboard_header.dart';
 import '../widgets/dashboard/safety_services_grid.dart';
 import '../widgets/dashboard/route_risk_card.dart';
-import '../models/route_response.dart';
+import '../state/active_trip_state.dart';
 import '../widgets/dashboard/search_destination_bar.dart';
 import '../widgets/dashboard/smart_rescue_card.dart';
 import 'map_screen.dart';
@@ -19,7 +19,8 @@ import 'sos_screen.dart';
 // Modular, clean, and composed of 5 dedicated safety components.
 // ==============================================================================
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  final ActiveTripState? tripState;
+  const DashboardScreen({super.key, this.tripState});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -28,22 +29,54 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   // Current active tab index in the Bottom Navigation Bar
   int _currentTabIndex = 0;
-  RouteResponse? _assessment;
+  final _destinationController = TextEditingController();
+  final _originController = TextEditingController();
+  ActiveTripState get _trips => widget.tripState ?? ActiveTripState.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncTrip();
+    _trips.addListener(_tripChanged);
+  }
+
+  void _syncTrip() {
+    _originController.text = _trips.trip?.originName ?? '';
+    _destinationController.text = _trips.trip?.destinationName ?? '';
+  }
+
+  void _tripChanged() {
+    if (mounted) setState(_syncTrip);
+  }
+
+  @override
+  void dispose() {
+    _trips.removeListener(_tripChanged);
+    _originController.dispose();
+    _destinationController.dispose();
+    super.dispose();
+  }
 
   // Navigation helper to open the interactive map & routing screen
-  void _navigateToMap([String? destination, bool trackGps = false]) {
-    Navigator.push(
+  Future<void> _navigateToMap([
+    String? destination,
+    bool trackGps = false,
+  ]) async {
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => MapScreen(
           initialDestination: destination,
-          trackGpsOnStart: trackGps || (destination != null && destination.isNotEmpty),
-          onAnalyzed: (result) {
-            if (mounted) setState(() => _assessment = result);
-          },
+          trackGpsOnStart:
+              trackGps ||
+              (_trips.trip == null &&
+                  destination != null &&
+                  destination.isNotEmpty),
+          tripState: _trips,
         ),
       ),
     );
+    if (mounted) setState(_syncTrip);
   }
 
   // Navigation helper to open the Emergency SOS & Smart Rescue screen
@@ -57,7 +90,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _handleLiveSharing() async {
     try {
       final position = await requireCurrentLocation();
-      final url = 'https://maps.google.com/?q=${position.latitude},${position.longitude}';
+      final url =
+          'https://maps.google.com/?q=${position.latitude},${position.longitude}';
       await Clipboard.setData(ClipboardData(text: url));
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -71,9 +105,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            error is ApiException
-                ? error.message
-                : 'Could not obtain GPS location. Enable device location services to share your position.',
+            error is ApiException ? error.message : 'Could not obtain GPS location. Enable device location services to share your position.',
           ),
           backgroundColor: const Color(0xFFDC2626),
         ),
@@ -101,21 +133,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return StatefulBuilder(
           builder: (context, setSheetState) {
             if (isLocating && location == null && locationError == null) {
-              requireCurrentLocation().then((pos) {
-                if (ctx.mounted) {
-                  setSheetState(() {
-                    location = LatLng(pos.latitude, pos.longitude);
-                    isLocating = false;
+              requireCurrentLocation()
+                  .then((pos) {
+                    if (ctx.mounted) {
+                      setSheetState(() {
+                        location = LatLng(pos.latitude, pos.longitude);
+                        isLocating = false;
+                      });
+                    }
+                  })
+                  .catchError((err) {
+                    if (ctx.mounted) {
+                      setSheetState(() {
+                        locationError = err is ApiException
+                            ? err.message
+                            : 'GPS unavailable';
+                        isLocating = false;
+                      });
+                    }
                   });
-                }
-              }).catchError((err) {
-                if (ctx.mounted) {
-                  setSheetState(() {
-                    locationError = err is ApiException ? err.message : 'GPS unavailable';
-                    isLocating = false;
-                  });
-                }
-              });
             }
 
             return Padding(
@@ -132,7 +168,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.warning_amber_rounded, color: Color(0xFFFF9800), size: 28),
+                        const Icon(
+                          Icons.warning_amber_rounded,
+                          color: Color(0xFFFF9800),
+                          size: 28,
+                        ),
                         const SizedBox(width: 10),
                         const Expanded(
                           child: Text(
@@ -154,64 +194,123 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     if (isLocating)
                       const Row(
                         children: [
-                          SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
                           SizedBox(width: 10),
-                          Text('Pinpointing your GPS location...', style: TextStyle(fontSize: 13, color: Colors.grey)),
+                          Text(
+                            'Pinpointing your GPS location...',
+                            style: TextStyle(fontSize: 13, color: Colors.grey),
+                          ),
                         ],
                       )
                     else if (location != null)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFFE8F3FF),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.my_location, size: 16, color: Color(0xFF087CF0)),
+                            const Icon(
+                              Icons.my_location,
+                              size: 16,
+                              color: Color(0xFF087CF0),
+                            ),
                             const SizedBox(width: 8),
                             Text(
                               'Location: ${location!.latitude.toStringAsFixed(4)}, ${location!.longitude.toStringAsFixed(4)}',
-                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF087CF0)),
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF087CF0),
+                              ),
                             ),
                           ],
                         ),
                       )
                     else
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFFFFEAEA),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
                           'Location error: $locationError',
-                          style: const TextStyle(fontSize: 12, color: Color(0xFFDC2626)),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFFDC2626),
+                          ),
                         ),
                       ),
                     const SizedBox(height: 16),
-                    const Text('Hazard Type', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    const Text(
+                      'Hazard Type',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     DropdownButtonFormField<String>(
-                      value: hazardType,
+                      initialValue: hazardType,
                       decoration: InputDecoration(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                       items: const [
-                        DropdownMenuItem(value: 'landslide', child: Text('Landslide / Rockfall')),
-                        DropdownMenuItem(value: 'flood', child: Text('Flash Flood / Waterlogging')),
-                        DropdownMenuItem(value: 'road', child: Text('Road Closure / Obstruction')),
-                        DropdownMenuItem(value: 'weather', child: Text('Severe Storm / Wind')),
-                        DropdownMenuItem(value: 'fog', child: Text('Dense Fog / Low Visibility')),
-                        DropdownMenuItem(value: 'animal', child: Text('Wildlife Hazard')),
+                        DropdownMenuItem(
+                          value: 'landslide',
+                          child: Text('Landslide / Rockfall'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'flood',
+                          child: Text('Flash Flood / Waterlogging'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'road',
+                          child: Text('Road Closure / Obstruction'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'weather',
+                          child: Text('Severe Storm / Wind'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'fog',
+                          child: Text('Dense Fog / Low Visibility'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'animal',
+                          child: Text('Wildlife Hazard'),
+                        ),
                       ],
                       onChanged: (val) {
                         if (val != null) setSheetState(() => hazardType = val);
                       },
                     ),
                     const SizedBox(height: 14),
-                    const Text('Severity (1 = Minor, 5 = Critical)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    const Text(
+                      'Severity (1 = Minor, 5 = Critical)',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
                     Row(
                       children: [
                         Expanded(
@@ -221,35 +320,56 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             max: 5,
                             divisions: 4,
                             label: 'Severity: $severity',
-                            activeColor: severity >= 4 ? const Color(0xFFDC2626) : const Color(0xFFFF9800),
-                            onChanged: (val) => setSheetState(() => severity = val.round()),
+                            activeColor: severity >= 4
+                                ? const Color(0xFFDC2626)
+                                : const Color(0xFFFF9800),
+                            onChanged: (val) =>
+                                setSheetState(() => severity = val.round()),
                           ),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
-                            color: severity >= 4 ? const Color(0xFFFFEAEA) : const Color(0xFFFFF3E0),
+                            color: severity >= 4
+                                ? const Color(0xFFFFEAEA)
+                                : const Color(0xFFFFF3E0),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
                             'Level $severity',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              color: severity >= 4 ? const Color(0xFFDC2626) : const Color(0xFFE65100),
+                              color: severity >= 4
+                                  ? const Color(0xFFDC2626)
+                                  : const Color(0xFFE65100),
                             ),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 14),
-                    const Text('Hazard Description', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    const Text(
+                      'Hazard Description',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     TextField(
                       controller: nameController,
                       decoration: InputDecoration(
                         hintText: 'e.g. Fallen tree blocking both lanes near hairpin 3',
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                       maxLines: 2,
                     ),
@@ -261,7 +381,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF087CF0),
                           foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
                         ),
                         onPressed: (isSubmitting || location == null)
                             ? null
@@ -270,7 +392,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 if (desc.length < 3) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
-                                      content: Text('Please enter at least 3 characters for the description.'),
+                                      content: Text(
+                                        'Please enter at least 3 characters for the description.',
+                                      ),
                                       backgroundColor: Color(0xFFDC2626),
                                     ),
                                   );
@@ -278,30 +402,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 }
                                 setSheetState(() => isSubmitting = true);
                                 try {
-                                  final result = await ApiService.instance.reportHazard(
-                                    name: desc,
-                                    hazardType: hazardType,
-                                    severity: severity,
-                                    latitude: location!.latitude,
-                                    longitude: location!.longitude,
-                                  );
+                                  final result = await ApiService.instance
+                                      .reportHazard(
+                                        name: desc,
+                                        hazardType: hazardType,
+                                        severity: severity,
+                                        latitude: location!.latitude,
+                                        longitude: location!.longitude,
+                                      );
                                   if (ctx.mounted) Navigator.pop(ctx);
                                   if (!mounted) return;
-                                  ScaffoldMessenger.of(this.context).showSnackBar(
+                                  ScaffoldMessenger.of(
+                                    this.context,
+                                  ).showSnackBar(
                                     SnackBar(
-                                      content: Text('Hazard "${result['name']}" reported successfully (ID: #${result['id']}).'),
+                                      content: Text(
+                                        'Hazard "${result['name']}" reported successfully (ID: #${result['id']}).',
+                                      ),
                                       backgroundColor: const Color(0xFF1EAA55),
                                     ),
                                   );
                                 } catch (error) {
                                   setSheetState(() => isSubmitting = false);
                                   if (!mounted) return;
-                                  ScaffoldMessenger.of(this.context).showSnackBar(
+                                  ScaffoldMessenger.of(
+                                    this.context,
+                                  ).showSnackBar(
                                     SnackBar(
                                       content: Text(
-                                        error is ApiException
-                                            ? error.message
-                                            : 'Failed to record hazard report. Please check your connection and retry.',
+                                        error is ApiException ? error.message : 'Failed to record hazard report. Please check your connection and retry.',
                                       ),
                                       backgroundColor: const Color(0xFFDC2626),
                                     ),
@@ -309,8 +438,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 }
                               },
                         child: isSubmitting
-                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                            : const Text('SUBMIT HAZARD REPORT', style: TextStyle(fontWeight: FontWeight.bold)),
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text(
+                                'SUBMIT HAZARD REPORT',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
                       ),
                     ),
                   ],
@@ -359,12 +498,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   if (snapshot.hasError) {
                     return Card(
                       color: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
                       child: Padding(
                         padding: const EdgeInsets.all(20),
                         child: Column(
                           children: [
-                            const Icon(Icons.error_outline, color: Color(0xFFDC2626), size: 36),
+                            const Icon(
+                              Icons.error_outline,
+                              color: Color(0xFFDC2626),
+                              size: 36,
+                            ),
                             const SizedBox(height: 10),
                             Text(
                               snapshot.error is ApiException
@@ -395,17 +540,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         padding: EdgeInsets.all(24),
                         child: Column(
                           children: [
-                            Icon(Icons.check_circle_outline, color: Color(0xFF1EAA55), size: 48),
+                            Icon(
+                              Icons.check_circle_outline,
+                              color: Color(0xFF1EAA55),
+                              size: 48,
+                            ),
                             SizedBox(height: 12),
                             Text(
                               'No Active Emergency Beacons',
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1A2D4F)),
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF1A2D4F),
+                              ),
                             ),
                             SizedBox(height: 6),
                             Text(
                               'All travel sectors monitored by Tour Guard are currently reporting normal conditions.',
                               textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Color(0xFF64748B),
+                              ),
                             ),
                           ],
                         ),
@@ -423,12 +579,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                         child: const Row(
                           children: [
-                            Icon(Icons.info_outline, size: 18, color: Color(0xFFB7791F)),
+                            Icon(
+                              Icons.info_outline,
+                              size: 18,
+                              color: Color(0xFFB7791F),
+                            ),
                             SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 'Emergency records logged in rescue registry. Responder dispatch is unconfirmed unless direct integration is active.',
-                                style: TextStyle(fontSize: 11.5, color: Color(0xFF7C5A22)),
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: Color(0xFF7C5A22),
+                                ),
                               ),
                             ),
                           ],
@@ -451,7 +614,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 Row(
                                   children: [
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
                                       decoration: BoxDecoration(
                                         color: const Color(0xFFDC2626),
                                         borderRadius: BorderRadius.circular(8),
@@ -459,11 +625,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       child: const Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          Icon(Icons.emergency, color: Colors.white, size: 14),
+                                          Icon(
+                                            Icons.emergency,
+                                            color: Colors.white,
+                                            size: 14,
+                                          ),
                                           SizedBox(width: 4),
                                           Text(
                                             'ACTIVE SOS BEACON',
-                                            style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                            ),
                                           ),
                                         ],
                                       ),
@@ -471,24 +645,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     const Spacer(),
                                     Text(
                                       'ID: #${event['id']}',
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF64748B)),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                        color: Color(0xFF64748B),
+                                      ),
                                     ),
                                   ],
                                 ),
                                 const SizedBox(height: 10),
                                 Text(
                                   'Tourist: ${event['tourist_id'] ?? 'Unassigned'}',
-                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Color(0xFF1A2D4F)),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
+                                    color: Color(0xFF1A2D4F),
+                                  ),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
                                   'GPS: ${event['latitude']?.toStringAsFixed(5)}, ${event['longitude']?.toStringAsFixed(5)}',
-                                  style: const TextStyle(fontSize: 13, color: Color(0xFF087CF0)),
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Color(0xFF087CF0),
+                                  ),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
                                   'Time: ${event['created_at']}',
-                                  style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0xFF94A3B8),
+                                  ),
                                 ),
                               ],
                             ),
@@ -505,7 +693,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -514,47 +701,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
       body: _currentTabIndex == 4
           ? const ProfileScreen()
           : _currentTabIndex == 3
-              ? _buildAlertsView()
-              : SafeArea(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 18,
-                      vertical: 16,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // 1. App Title & Notifications Header
-                        const DashboardHeader(),
-                        const SizedBox(height: 16),
-
-                        // 2. AI Safety Status & Live Environmental Card (Compact)
-                        RouteRiskCard(route: _assessment),
-                        const SizedBox(height: 18),
-
-                        // 3. Destination Search Bar
-                        SearchDestinationBar(
-                          onSubmitted: (query) => _navigateToMap(query, true),
-                          onGpsTap: () => _navigateToMap(null, true),
-                        ),
-                        const SizedBox(height: 20),
-
-                        // 4. 2x2 Core Safety Services Grid (AI Radar, Route, Sharing, Reports)
-                        SafetyServicesGrid(
-                          onRiskRadarTap: () => _navigateToMap(null, true),
-                          onSafeRouteTap: () => _navigateToMap(),
-                          onLiveSharingTap: _handleLiveSharing,
-                          onReportHazardTap: _showReportHazardDialog,
-                        ),
-                        const SizedBox(height: 20),
-
-                        // 5. Emergency SOS Beacon & Official Helplines (112, 1077)
-                        SmartRescueCard(onTriggerSos: _navigateToSos),
-                        const SizedBox(height: 14),
-                      ],
-                    ),
-                  ),
+          ? _buildAlertsView()
+          : SafeArea(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 16,
                 ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 1. App Title & Notifications Header
+                    const DashboardHeader(),
+                    const SizedBox(height: 16),
+
+                    // 2. AI Safety Status & Live Environmental Card (Compact)
+                    RouteRiskCard(trip: _trips.trip, onEndTrip: _trips.clear),
+                    const SizedBox(height: 18),
+
+                    // 3. Destination Search Bar
+                    SearchDestinationBar(
+                      controller: _destinationController,
+                      originController: _originController,
+                      onOriginTap: () => _navigateToMap(),
+                      onSubmitted: (query) => _navigateToMap(query),
+                      onGpsTap: () => _navigateToMap(null, true),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // 4. 2x2 Core Safety Services Grid (AI Radar, Route, Sharing, Reports)
+                    SafetyServicesGrid(
+                      onRiskRadarTap: () => _navigateToMap(null, true),
+                      onSafeRouteTap: () => _navigateToMap(),
+                      onLiveSharingTap: _handleLiveSharing,
+                      onReportHazardTap: _showReportHazardDialog,
+                    ),
+                    const SizedBox(height: 20),
+
+                    // 5. Emergency SOS Beacon & Official Helplines (112, 1077)
+                    SmartRescueCard(onTriggerSos: _navigateToSos),
+                    const SizedBox(height: 14),
+                  ],
+                ),
+              ),
+            ),
 
       // 6. Bottom Navigation Bar (Home, Safe Route, SOS, Alerts, Profile)
       bottomNavigationBar: Container(

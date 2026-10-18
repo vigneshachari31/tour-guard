@@ -6,12 +6,16 @@ import 'package:flutter/material.dart';
 // ==============================================================================
 class SearchDestinationBar extends StatelessWidget {
   final TextEditingController? controller;
+  final TextEditingController? originController;
+  final VoidCallback? onOriginTap;
   final ValueChanged<String>? onSubmitted;
   final VoidCallback? onGpsTap;
 
   const SearchDestinationBar({
     super.key,
     this.controller,
+    this.originController,
+    this.onOriginTap,
     this.onSubmitted,
     this.onGpsTap,
   });
@@ -32,6 +36,27 @@ class SearchDestinationBar extends StatelessWidget {
         ),
         const SizedBox(height: 10),
 
+        if (originController != null) ...[
+          TextField(
+            controller: originController,
+            readOnly: true,
+            onTap: onOriginTap,
+            decoration: InputDecoration(
+              hintText: 'Choose origin',
+              prefixIcon: const Icon(
+                Icons.trip_origin,
+                color: Color(0xFF087CF0),
+              ),
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(18),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
         // Search Input Bar Container
         Container(
           decoration: BoxDecoration(
