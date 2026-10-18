@@ -29,6 +29,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoading = true;
   bool _isSaving = false;
   bool _isUploading = false;
+  bool _isEditing = false;
+  UserProfile? _loadedProfile;
   String? _loadError;
   Uint8List? _avatar;
   ApiService get _api => widget.api ?? ApiService.instance;
@@ -82,6 +84,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       final profile = await _api.getProfile();
       if (!mounted) return;
+      _loadedProfile = profile;
       _fill(profile);
       if (profile.pictureUrl != null) {
         try {
@@ -118,7 +121,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       );
       if (!mounted) return;
-      setState(() => _fill(profile));
+      setState(() {
+        _loadedProfile = profile;
+        _fill(profile);
+        _isEditing = false;
+      });
       _showMessage('Profile saved to your account.');
     } catch (error) {
       if (mounted) _handleError(error);
@@ -202,14 +209,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'MY PROFILE',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1,
-                        color: Color(0xFF1A2D4F),
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'MY PROFILE',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1,
+                            color: Color(0xFF1A2D4F),
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: _isSaving || _isUploading
+                              ? null
+                              : () {
+                                  setState(() {
+                                    _isEditing = !_isEditing;
+                                    if (!_isEditing && _loadedProfile != null) {
+                                      _fill(_loadedProfile!);
+                                    }
+                                  });
+                                },
+                          icon: Icon(
+                            _isEditing ? Icons.close : Icons.edit_outlined,
+                            size: 16,
+                            color: const Color(0xFF087CF0),
+                          ),
+                          label: Text(
+                            _isEditing ? 'Cancel' : 'Edit Profile',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF087CF0),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 16),
                     Container(
@@ -373,63 +410,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       icon: Icons.warning_amber_rounded,
                       maxLines: 2,
                     ),
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFF7E8),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: const Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(
-                            Icons.info_outline_rounded,
-                            size: 18,
-                            color: Color(0xFFB7791F),
-                          ),
-                          SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Your profile is saved to your account. Changing your email also changes your sign-in email.',
-                              style: TextStyle(
-                                fontSize: 12,
-                                height: 1.35,
-                                color: Color(0xFF7C5A22),
-                              ),
+                    if (_isEditing) ...[
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: ElevatedButton.icon(
+                          onPressed: _isSaving || _isUploading
+                              ? null
+                              : _saveProfile,
+                          icon: _isSaving
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(Icons.save_outlined),
+                          label: Text(_isSaving ? 'SAVING...' : 'SAVE PROFILE'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF087CF0),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: ElevatedButton.icon(
-                        onPressed: _isSaving || _isUploading
-                            ? null
-                            : _saveProfile,
-                        icon: _isSaving
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Icon(Icons.save_outlined),
-                        label: Text(_isSaving ? 'SAVING...' : 'SAVE PROFILE'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF087CF0),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
                           ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -462,6 +472,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       padding: const EdgeInsets.only(bottom: 12),
       child: TextFormField(
         controller: controller,
+        readOnly: !_isEditing,
         enabled: !_isSaving && !_isUploading,
         keyboardType: keyboardType,
         maxLines: maxLines,
@@ -471,16 +482,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
         decoration: InputDecoration(
           labelText: label,
           hintText: hintText,
-          prefixIcon: Icon(icon, color: const Color(0xFF087CF0), size: 20),
+          prefixIcon: Icon(
+            icon,
+            color: _isEditing
+                ? const Color(0xFF087CF0)
+                : const Color(0xFF8A99AF),
+            size: 20,
+          ),
           filled: true,
-          fillColor: Colors.white,
+          fillColor: _isEditing ? Colors.white : const Color(0xFFF8FAFC),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
             borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
-            borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+            borderSide: BorderSide(
+              color: _isEditing
+                  ? const Color(0xFFE2E8F0)
+                  : const Color(0xFFF1F5F9),
+            ),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),

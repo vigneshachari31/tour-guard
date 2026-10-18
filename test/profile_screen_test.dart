@@ -91,6 +91,8 @@ void main() {
     await tester.pumpWidget(screen());
     await tester.pumpAndSettle();
     expect(find.text('Original'), findsWidgets);
+    await tester.tap(find.text('Edit Profile'));
+    await tester.pumpAndSettle();
     final values = [
       'Taylor Tourist',
       'updated@example.com',
@@ -111,6 +113,9 @@ void main() {
     expect(profile['phone_number'], values[2]);
     expect(profile['allergies'], 'Pollen');
     expect(find.text('Profile saved to your account.'), findsOneWidget);
+    expect(find.textContaining('Changing your email also changes your sign-in email'), findsNothing);
+    expect(find.text('SAVE PROFILE'), findsNothing);
+    expect(find.text('Edit Profile'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(screen());
     await tester.pumpAndSettle();
