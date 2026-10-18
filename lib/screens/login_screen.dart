@@ -242,9 +242,7 @@ class _LoginCard extends StatelessWidget {
                   ),
           ),
         ),
-        const SizedBox(height: 29),
-        const _SocialSection(),
-        const SizedBox(height: 23),
+        const SizedBox(height: 20),
         Wrap(
           alignment: WrapAlignment.center,
           crossAxisAlignment: WrapCrossAlignment.center,
@@ -273,40 +271,6 @@ class _LoginCard extends StatelessWidget {
         ),
       ],
     ),
-  );
-}
-
-class _SocialSection extends StatelessWidget {
-  const _SocialSection();
-
-  @override
-  Widget build(BuildContext context) => const Column(
-    children: [
-      Row(
-        children: [
-          Expanded(child: Divider(color: Color(0xFFD4DBE5))),
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 18),
-            child: Text(
-              'Or continue with',
-              style: TextStyle(color: Color(0xFF61708A), fontSize: 15),
-            ),
-          ),
-          Expanded(child: Divider(color: Color(0xFFD4DBE5))),
-        ],
-      ),
-      SizedBox(height: 20),
-      Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _SocialButton(label: 'G', color: Color(0xFF4285F4)),
-          SizedBox(width: 28),
-          _SocialButton(label: 'A', color: Colors.black),
-          SizedBox(width: 28),
-          _SocialButton(icon: Icons.phone_rounded, color: _LoginCard.blue),
-        ],
-      ),
-    ],
   );
 }
 
@@ -349,36 +313,6 @@ class _InputField extends StatelessWidget {
         borderRadius: BorderRadius.circular(17),
         borderSide: const BorderSide(color: Color(0xFF087CF0), width: 1.5),
       ),
-    ),
-  );
-}
-
-class _SocialButton extends StatelessWidget {
-  const _SocialButton({this.label, this.icon, required this.color});
-
-  final String? label;
-  final IconData? icon;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: 62,
-    height: 62,
-    decoration: BoxDecoration(
-      shape: BoxShape.circle,
-      border: Border.all(color: const Color(0xFFE1E6ED), width: 1.5),
-    ),
-    child: Center(
-      child: icon != null
-          ? Icon(icon, color: color, size: 27)
-          : Text(
-              label!,
-              style: TextStyle(
-                color: color,
-                fontSize: 27,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
     ),
   );
 }
