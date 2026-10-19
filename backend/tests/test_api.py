@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import jwt
@@ -26,6 +26,7 @@ def register(client, email="tourist@example.com"):
 def test_register_login_duplicate_and_persisted_sos(client):
     account = register(client)
     assert account["tourist_id"].startswith("TG-")
+    assert account["role"] == "tourist"
     assert "hashed_password" not in account
     assert (
         client.post(
@@ -47,6 +48,8 @@ def test_register_login_duplicate_and_persisted_sos(client):
     )
     assert login.status_code == 200
     headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    # Tourist JWTs must never receive the rescue command data feed.
+    assert client.get("/api/v1/admin/sos-events", headers=headers).status_code == 403
     body = {"tourist_id": account["tourist_id"], "latitude": 11.4, "longitude": 76.7}
     assert client.post("/api/v1/sos/trigger", json=body).status_code == 401
     result = client.post("/api/v1/sos/trigger", json=body, headers=headers)
@@ -86,8 +89,8 @@ def test_expired_token_and_coordinate_validation(client):
     token = jwt.encode(
         {
             "sub": "1",
-            "iat": datetime.now(timezone.utc) - timedelta(hours=2),
-            "exp": datetime.now(timezone.utc) - timedelta(hours=1),
+            "iat": datetime.now(UTC) - timedelta(hours=2),
+            "exp": datetime.now(UTC) - timedelta(hours=1),
             "iss": settings.jwt_issuer,
             "aud": settings.jwt_audience,
         },
@@ -118,7 +121,7 @@ def test_risk_thresholds_and_missing_data():
     weather = WeatherObservation(
         rainfall_mm_h=0,
         wind_kmh=5,
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         source="test observation",
     )
     assert assess_risk([], weather, True).level == "SAFE"
@@ -135,7 +138,7 @@ def test_risk_thresholds_and_missing_data():
     assert not assess_risk(
         [],
         weather.model_copy(
-            update={"observed_at": datetime.now(timezone.utc) - timedelta(hours=2)}
+            update={"observed_at": datetime.now(UTC) - timedelta(hours=2)}
         ),
         True,
     ).weather_used

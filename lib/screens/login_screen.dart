@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'dashboard_screen.dart';
+import 'admin_dashboard_screen.dart';
 import '../services/api_service.dart';
 import 'register_screen.dart';
 
@@ -28,14 +29,18 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      await ApiService.instance.login(
+      final session = await ApiService.instance.login(
         email: _emailController.text,
         password: _passwordController.text,
       );
       if (!mounted) return;
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const DashboardScreen()),
+        MaterialPageRoute(
+          builder: (_) => session.role == 'admin'
+              ? const AdminDashboardScreen()
+              : const DashboardScreen(),
+        ),
         (_) => false,
       );
     } catch (error) {

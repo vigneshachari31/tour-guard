@@ -43,18 +43,25 @@ class SecureSessionStore implements SessionStore {
 class AuthSession {
   final String accessToken;
   final String? touristId;
-  const AuthSession(this.accessToken, this.touristId);
+  final String role;
+  const AuthSession(this.accessToken, this.touristId, {this.role = 'tourist'});
   factory AuthSession.fromJson(Map<String, dynamic> json) {
     final token = json['access_token'];
     if (token is! String || token.isEmpty || json['token_type'] != 'bearer') {
       throw const FormatException('Invalid authentication response');
     }
-    return AuthSession(token, json['tourist_id'] as String?);
+    final role = json['role'];
+    return AuthSession(
+      token,
+      json['tourist_id'] as String?,
+      role: role == 'admin' ? 'admin' : 'tourist',
+    );
   }
   Map<String, dynamic> toJson() => {
     'access_token': accessToken,
     'token_type': 'bearer',
     'tourist_id': touristId,
+    'role': role,
   };
 }
 
@@ -67,6 +74,103 @@ class SosReceipt {
     json['status'] as String,
     json['message'] as String,
   );
+}
+
+class AdminSosEvent {
+  final int id;
+  final String touristId, status;
+  final double latitude, longitude;
+  final DateTime createdAt;
+  final String? fullName,
+      phoneNumber,
+      bloodGroup,
+      emergencyContact,
+      medicalNotes;
+  const AdminSosEvent({
+    required this.id,
+    required this.touristId,
+    required this.status,
+    required this.latitude,
+    required this.longitude,
+    required this.createdAt,
+    this.fullName,
+    this.phoneNumber,
+    this.bloodGroup,
+    this.emergencyContact,
+    this.medicalNotes,
+  });
+  factory AdminSosEvent.fromJson(Map<String, dynamic> json) => AdminSosEvent(
+    id: json['id'] as int,
+    touristId: json['tourist_id'] as String,
+    status: json['status'] as String,
+    latitude: (json['latitude'] as num).toDouble(),
+    longitude: (json['longitude'] as num).toDouble(),
+    createdAt: DateTime.parse(json['created_at'] as String),
+    fullName: json['full_name'] as String?,
+    phoneNumber: json['phone_number'] as String?,
+    bloodGroup: json['blood_group'] as String?,
+    emergencyContact: json['emergency_contact'] as String?,
+    medicalNotes: json['medical_notes'] as String?,
+  );
+}
+
+class AdminHazard {
+  final int id, severity;
+  final String name, hazardType, source;
+  final bool isActive;
+  final String geometryType;
+  final List<List<List<double>>> polygonCoordinates;
+  final List<double>? pointCoordinates;
+  const AdminHazard({
+    required this.id,
+    required this.name,
+    required this.hazardType,
+    required this.severity,
+    required this.source,
+    required this.isActive,
+    required this.geometryType,
+    required this.polygonCoordinates,
+    this.pointCoordinates,
+  });
+  bool get isPolygon => geometryType == 'Polygon';
+  bool get isPoint => geometryType == 'Point';
+  factory AdminHazard.fromJson(Map<String, dynamic> json) {
+    final geometry = json['geometry'] as Map<String, dynamic>;
+    final geometryType = geometry['type'] as String? ?? 'Unknown';
+    final rawCoordinates = geometry['coordinates'];
+    return AdminHazard(
+      id: json['id'] as int,
+      name: json['name'] as String,
+      hazardType: json['hazard_type'] as String,
+      severity: json['severity'] as int,
+      source: (json['source'] as String?) ?? 'Not recorded',
+      isActive: json['is_active'] as bool,
+      geometryType: geometryType,
+      polygonCoordinates: geometryType == 'Polygon' && rawCoordinates is List
+          ? rawCoordinates
+                .map(
+                  (ring) => (ring as List)
+                      .map(
+                        (point) => [
+                          (point[0] as num).toDouble(),
+                          (point[1] as num).toDouble(),
+                        ],
+                      )
+                      .toList(),
+                )
+                .toList()
+          : const [],
+      pointCoordinates:
+          geometryType == 'Point' &&
+              rawCoordinates is List &&
+              rawCoordinates.length >= 2
+          ? [
+              (rawCoordinates[0] as num).toDouble(),
+              (rawCoordinates[1] as num).toDouble(),
+            ]
+          : null,
+    );
+  }
 }
 
 class ApiService {
@@ -236,6 +340,58 @@ class ApiService {
     return [];
   }
 
+  Future<List<AdminSosEvent>> getAdminSosEvents() async {
+    final result = await _post('/admin/sos-events', {}, method: 'GET');
+    final events = result['items'] ?? result['events'] ?? result;
+    if (events is! List) throw const ApiException('Invalid SOS desk response.');
+    return events
+        .map((event) => AdminSosEvent.fromJson(event as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<AdminSosEvent> updateAdminSosStatus(int id, String status) async =>
+      AdminSosEvent.fromJson(
+        await _post('/admin/sos-events/$id/status', {
+          'status': status,
+        }, method: 'PATCH'),
+      );
+
+  Future<List<AdminHazard>> getAdminHazards({
+    bool includeInactive = false,
+  }) async {
+    final result = await _post(
+      '/admin/hazards?include_inactive=$includeInactive',
+      {},
+      method: 'GET',
+    );
+    final items = result['items'] ?? result;
+    if (items is! List)
+      throw const ApiException('Invalid hazard-zone response.');
+    return items
+        .map((item) => AdminHazard.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<AdminHazard> createAdminHazard({
+    required String name,
+    required String hazardType,
+    required int severity,
+    required String source,
+    required List<List<List<double>>> coordinates,
+  }) async => AdminHazard.fromJson(
+    await _post('/admin/hazards', {
+      'name': name,
+      'hazard_type': hazardType,
+      'severity': severity,
+      'source': source,
+      'geometry': {'type': 'Polygon', 'coordinates': coordinates},
+    }),
+  );
+
+  Future<void> deactivateAdminHazard(int id) async {
+    await _post('/admin/hazards/$id', {}, method: 'DELETE');
+  }
+
   Future<Map<String, dynamic>> reportHazard({
     required String name,
     required String hazardType,
@@ -304,7 +460,8 @@ class ApiService {
         'Accept': 'application/json',
         if (token != null) 'Authorization': 'Bearer $token',
       });
-      if (method != 'GET') request.body = jsonEncode(body);
+      if (method != 'GET' && method != 'DELETE')
+        request.body = jsonEncode(body);
       final response = await _client
           .send(request)
           .then(http.Response.fromStream)
@@ -342,6 +499,8 @@ class ApiService {
             : 'Server request failed (${response.statusCode}). Please try again.';
         throw ApiException(message, statusCode: response.statusCode);
       }
+      if (response.statusCode == 204) return const {};
+      if (data is List) return {'items': data};
       if (data is! Map<String, dynamic>) {
         throw const ApiException('Invalid server response.');
       }

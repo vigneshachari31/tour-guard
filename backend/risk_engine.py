@@ -83,6 +83,7 @@ def nearby_hazards(
     query = (
         select(HazardZone)
         .where(
+            HazardZone.is_active.is_(True),
             func.ST_DWithin(
                 cast(HazardZone.geometry, Geography(srid=4326)), route, buffer_meters
             )

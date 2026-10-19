@@ -7,6 +7,7 @@ import 'screens/profile_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/sos_screen.dart';
 import 'screens/splash_screen.dart';
+import 'screens/admin_dashboard_screen.dart';
 
 // ==============================================================================
 // 🚀 APPLICATION ENTRY POINT (TOUR GUARD)
@@ -43,6 +44,7 @@ class TravelRiskApp extends StatelessWidget {
         '/map': (context) => const MapScreen(),
         '/profile': (context) => const ProfileScreen(),
         '/sos': (context) => const SosScreen(),
+        '/admin': (context) => const AdminDashboardScreen(),
       },
     );
   }

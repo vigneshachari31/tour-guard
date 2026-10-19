@@ -23,6 +23,7 @@ if __package__:
     from .models import HazardZone, SOSEvent, User
     from .risk_engine import assess_risk, fetch_route, nearby_hazards
     from .routers.profile import router as profile_router
+    from .routers.admin import router as admin_router
     from .schemas import (
         HazardReportRequest,
         HazardReportResponse,
@@ -47,6 +48,7 @@ else:
     from models import HazardZone, SOSEvent, User
     from risk_engine import assess_risk, fetch_route, nearby_hazards
     from routers.profile import router as profile_router
+    from routers.admin import router as admin_router
     from schemas import (
         HazardReportRequest,
         HazardReportResponse,
@@ -87,9 +89,10 @@ def get_http(request: Request) -> httpx.Client:
 
 def token_for(user: User) -> TokenResponse:
     return TokenResponse(
-        access_token=create_access_token(user.id),
+        access_token=create_access_token(user),
         tourist_id=user.tourist_id,
         expires_in=get_settings().access_token_minutes * 60,
+        role=user.role,
     )
 
 
@@ -103,11 +106,12 @@ def create_app() -> FastAPI:
             r"http://(?:localhost|127\.0\.0\.1)(?::[0-9]{1,5})?"
             if settings.cors_allow_localhost else None
         ),
-        allow_methods=["GET", "POST", "PUT"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
         allow_headers=["Authorization", "Content-Type"],
     )
 
     app.include_router(profile_router)
+    app.include_router(admin_router)
 
     @app.exception_handler(SQLAlchemyError)
     async def database_error(request: Request, exc: SQLAlchemyError) -> JSONResponse:

@@ -136,6 +136,30 @@ The spatial test inserts synthetic fixtures in a rolled-back transaction only.
 
 ## Before production deployment
 
+## Rescue Command Portal
+
+Run the latest migration before using the portal:
+
+```powershell
+backend/.venv/Scripts/alembic -c backend/alembic.ini upgrade head
+```
+
+Admin access is deliberately **not** available through signup. From a trusted
+local terminal, create or promote one verified account with hidden password input:
+
+```powershell
+backend/.venv/Scripts/python -m backend.create_admin rescue-team@example.org
+```
+
+For a deployment pipeline, provide the password through its secret store as
+`TOUR_GUARD_ADMIN_PASSWORD`; never put it in source code or a command line.
+
+That account must sign out and sign in again so its JWT contains `role: admin`.
+Then open Flutter's `/admin` route. The server verifies both the signed JWT role
+and the current database role before it returns SOS locations, medical profile
+details, or hazard controls. Deleting a hazard is a reversible deactivation;
+the route-risk query excludes inactive hazards.
+
 Use TLS, a secrets manager, exact CORS origins, a private database with backups,
 separate migration/runtime roles, and reviewed/pinned dependency versions. Apply
 gateway rate limits to registration/login, routing and SOS, plus request-body limits.

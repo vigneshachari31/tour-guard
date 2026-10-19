@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
@@ -40,6 +40,7 @@ class TokenResponse(BaseModel):
     token_type: Literal["bearer"] = "bearer"
     expires_in: int
     tourist_id: str
+    role: Literal["tourist", "admin"] = "tourist"
 
 
 class WeatherObservation(InputModel):
@@ -108,7 +109,7 @@ class SOSResponse(BaseModel):
     tourist_id: str
     latitude: float
     longitude: float
-    status: Literal["active", "resolved"]
+    status: Literal["active", "acknowledged", "dispatched", "resolved"]
     created_at: datetime
     message: str = "SOS recorded. Responder dispatch is not confirmed."
 
@@ -162,3 +163,55 @@ class ProfileResponse(ProfileUpdate):
 
 class AvatarUpload(InputModel):
     image_base64: str = Field(min_length=1, max_length=2796204)
+
+
+class AdminSOSResponse(InputModel):
+    id: int
+    tourist_id: str
+    latitude: Latitude
+    longitude: Longitude
+    status: Literal["active", "acknowledged", "dispatched", "resolved"]
+    created_at: datetime
+    full_name: str | None = None
+    phone_number: str | None = None
+    blood_group: str | None = None
+    emergency_contact: str | None = None
+    medical_notes: str | None = None
+
+
+class SOSStatusUpdate(InputModel):
+    status: Literal["active", "acknowledged", "dispatched", "resolved"]
+
+
+class HazardGeometry(InputModel):
+    type: Literal["Polygon"]
+    coordinates: list[list[tuple[Longitude, Latitude]]] = Field(min_length=1)
+
+    @field_validator("coordinates")
+    @classmethod
+    def validate_rings(cls, rings):
+        if any(len(ring) < 4 or ring[0] != ring[-1] for ring in rings):
+            raise ValueError("Each polygon ring must have at least 4 closed coordinates")
+        return rings
+
+
+class AdminHazardCreate(InputModel):
+    name: str = Field(min_length=3, max_length=200)
+    hazard_type: str = Field(min_length=3, max_length=50)
+    severity: int = Field(ge=1, le=5)
+    geometry: HazardGeometry
+    source: str = Field(min_length=3, max_length=500)
+
+
+class AdminHazardResponse(InputModel):
+    id: int
+    name: str
+    hazard_type: str
+    severity: int
+    source: str | None
+    is_active: bool
+    # Historic community reports are stored as Point geometries, while rescue
+    # command zones are Polygons.  Keep both visible; only creation accepts a
+    # validated Polygon (AdminHazardCreate above).
+    geometry: dict[str, Any]
+    updated_at: datetime | None
