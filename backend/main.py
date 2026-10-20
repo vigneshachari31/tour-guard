@@ -1,5 +1,9 @@
+import json
 import logging
+import time
+from collections import deque
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Annotated, Literal
 from uuid import uuid4
 
@@ -20,9 +24,11 @@ if __package__:
     )
     from .config import get_settings
     from .database import get_db, get_engine
-    from .models import HazardZone, SOSEvent, User
+    from .models import HazardZone, RiskAssessmentLog, SOSEvent, Trip, User
     from .risk_engine import assess_risk, fetch_route, nearby_hazards
+    from .routers.admin import router as admin_router
     from .routers.profile import router as profile_router
+    from .routers.trips import router as trips_router
     from .schemas import (
         HazardReportRequest,
         HazardReportResponse,
@@ -44,9 +50,11 @@ else:
     )
     from config import get_settings
     from database import get_db, get_engine
-    from models import HazardZone, SOSEvent, User
+    from models import HazardZone, RiskAssessmentLog, SOSEvent, Trip, User
     from risk_engine import assess_risk, fetch_route, nearby_hazards
+    from routers.admin import router as admin_router
     from routers.profile import router as profile_router
+    from routers.trips import router as trips_router
     from schemas import (
         HazardReportRequest,
         HazardReportResponse,
@@ -87,7 +95,7 @@ def get_http(request: Request) -> httpx.Client:
 
 def token_for(user: User) -> TokenResponse:
     return TokenResponse(
-        access_token=create_access_token(user.id),
+        access_token=create_access_token(user.id, user.role),
         tourist_id=user.tourist_id,
         expires_in=get_settings().access_token_minutes * 60,
     )
@@ -101,13 +109,51 @@ def create_app() -> FastAPI:
         allow_origins=settings.cors_origins,
         allow_origin_regex=(
             r"http://(?:localhost|127\.0\.0\.1)(?::[0-9]{1,5})?"
-            if settings.cors_allow_localhost else None
+            if settings.cors_allow_localhost
+            else None
         ),
-        allow_methods=["GET", "POST", "PUT"],
+        allow_methods=["GET", "POST", "PUT", "PATCH"],
         allow_headers=["Authorization", "Content-Type"],
     )
 
     app.include_router(profile_router)
+    app.include_router(admin_router)
+    app.include_router(trips_router)
+
+    login_attempts: dict[str, deque[float]] = {}
+
+    @app.middleware("http")
+    async def admin_security_headers(request, call_next):
+        if request.url.path == "/api/v1/admin/auth/login" and request.method == "POST":
+            # Per-process protection; a shared gateway limiter is needed with multiple workers.
+            now = time.monotonic()
+            for key in list(login_attempts):
+                if not login_attempts[key] or login_attempts[key][-1] < now - 60:
+                    del login_attempts[key]
+            key = request.client.host if request.client else "unknown"
+            if key not in login_attempts and len(login_attempts) >= 4096:
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "Login is busy; retry shortly"},
+                    headers={"Retry-After": "60"},
+                )
+            attempts = login_attempts.setdefault(key, deque())
+            while attempts and attempts[0] < now - 60:
+                attempts.popleft()
+            if len(attempts) >= 10:
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "Too many login attempts. Wait one minute."},
+                    headers={"Retry-After": "60"},
+                )
+            attempts.append(now)
+        response = await call_next(request)
+        if request.url.path.startswith(("/api/v1/admin", "/admin")):
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers["Referrer-Policy"] = "no-referrer"
+            response.headers["X-Frame-Options"] = "DENY"
+        return response
 
     @app.exception_handler(SQLAlchemyError)
     async def database_error(request: Request, exc: SQLAlchemyError) -> JSONResponse:
@@ -177,6 +223,8 @@ def create_app() -> FastAPI:
                 401, "Invalid email or password", headers={"WWW-Authenticate": "Bearer"}
             )
         assert user is not None
+        if not user.is_active:
+            raise HTTPException(401, "Account is inactive")
         return token_for(user)
 
     @app.post("/api/v1/route/analyze", response_model=RouteResponse, tags=["Routes"])
@@ -188,7 +236,7 @@ def create_app() -> FastAPI:
     ) -> RouteResponse:
         geometry, distance, duration = fetch_route(body, client)
         hazards = nearby_hazards(db, geometry, settings.route_buffer_meters)
-        return RouteResponse(
+        result = RouteResponse(
             geometry=geometry,
             distance_meters=distance,
             duration_seconds=duration,
@@ -198,6 +246,49 @@ def create_app() -> FastAPI:
                 hazards, body.weather, settings.hazard_coverage_verified
             ),
         )
+
+        # Serialize trip replacement for this tourist; keep assessment and trip atomic.
+        db.execute(select(User.id).where(User.id == user.id).with_for_update())
+        for previous in db.scalars(
+            select(Trip).where(
+                Trip.tourist_id == user.tourist_id, Trip.status == "active"
+            )
+        ):
+            previous.status = "completed"
+            previous.ended_at = datetime.now(timezone.utc)
+        trip = Trip(
+            tourist_id=user.tourist_id,
+            source_name=body.origin_name
+            or f"{body.origin_lat:.5f}, {body.origin_lng:.5f}",
+            destination_name=body.destination_name
+            or f"{body.dest_lat:.5f}, {body.dest_lng:.5f}",
+            origin_lat=body.origin_lat,
+            origin_lng=body.origin_lng,
+            dest_lat=body.dest_lat,
+            dest_lng=body.dest_lng,
+            route_geometry=geometry.model_dump_json(),
+        )
+        db.add(trip)
+        db.flush()
+        db.add(
+            RiskAssessmentLog(
+                user_id=user.id,
+                trip_id=trip.id,
+                origin_lat=body.origin_lat,
+                origin_lng=body.origin_lng,
+                dest_lat=body.dest_lat,
+                dest_lng=body.dest_lng,
+                risk_level=result.assessment.level,
+                distance_meters=distance,
+                duration_seconds=duration,
+                hazards_count=len(hazards),
+                weather_used=result.assessment.weather_used,
+                reasons=json.dumps(result.assessment.reasons),
+                limitations=json.dumps(result.assessment.limitations),
+            )
+        )
+        db.commit()
+        return result.model_copy(update={"trip_id": trip.id})
 
     @app.post(
         "/api/v1/sos/trigger", response_model=SOSResponse, status_code=201, tags=["SOS"]
@@ -226,7 +317,7 @@ def create_app() -> FastAPI:
         db: DB,
         status: Literal["active", "resolved"] | None = "active",
     ) -> SOSEventsListResponse:
-        stmt = select(SOSEvent)
+        stmt = select(SOSEvent).where(SOSEvent.tourist_id == user.tourist_id)
         if status:
             stmt = stmt.where(SOSEvent.status == status)
         stmt = stmt.order_by(SOSEvent.created_at.desc()).limit(100)
@@ -247,9 +338,7 @@ def create_app() -> FastAPI:
         user: CurrentUser,
         db: DB,
     ) -> HazardReportResponse:
-        geom = func.ST_SetSRID(
-            func.ST_MakePoint(body.longitude, body.latitude), 4326
-        )
+        geom = func.ST_SetSRID(func.ST_MakePoint(body.longitude, body.latitude), 4326)
         hazard = HazardZone(
             name=body.name,
             hazard_type=body.hazard_type,
@@ -271,6 +360,25 @@ def create_app() -> FastAPI:
             updated_at=hazard.updated_at,
         )
 
+    from pathlib import Path
+
+    from fastapi.staticfiles import StaticFiles
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+
+    class AdminFiles(StaticFiles):
+        async def get_response(self, path, scope):
+            try:
+                return await super().get_response(path, scope)
+            except StarletteHTTPException as exc:
+                if exc.status_code == 404 and not Path(path).suffix:
+                    return await super().get_response("index.html", scope)
+                raise
+
+    bundle = Path(__file__).resolve().parent.parent / "admin_dashboard" / "dist"
+    if bundle.is_dir():
+        app.mount(
+            "/admin", AdminFiles(directory=bundle, html=True), name="admin-dashboard"
+        )
     return app
 
 

@@ -30,12 +30,13 @@ def verify_password(password: str, hashed_password: str | None) -> bool:
     return valid and hashed_password is not None
 
 
-def create_access_token(user_id: int) -> str:
+def create_access_token(user_id: int, role: str = "tourist") -> str:
     settings = get_settings()
     now = datetime.now(timezone.utc)
     return jwt.encode(
         {
             "sub": str(user_id),
+            "role": role,
             "iat": now,
             "exp": now + timedelta(minutes=settings.access_token_minutes),
             "iss": settings.jwt_issuer,
@@ -71,6 +72,13 @@ def get_current_user(
     except (jwt.InvalidTokenError, ValueError, TypeError) as exc:
         raise unauthorized from exc
     user = db.get(User, user_id)
-    if user is None:
+    if user is None or not user.is_active:
         raise unauthorized
+    return user
+
+
+def verify_admin(user: Annotated[User, Depends(get_current_user)]) -> User:
+    # Database role is authoritative: role changes revoke access immediately.
+    if user.role != "admin":
+        raise HTTPException(403, "Administrator access required")
     return user

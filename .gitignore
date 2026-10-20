@@ -52,3 +52,11 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+admin_dashboard/node_modules/
+admin_dashboard/dist/
+admin_dashboard/.env*
+!admin_dashboard/.env.example
+
+admin_dashboard/test-results/
+admin_dashboard/playwright-report/

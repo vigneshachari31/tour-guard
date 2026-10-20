@@ -181,6 +181,8 @@ class ApiService {
     required double destLat,
     required double destLng,
     WeatherObservation? weather,
+    String? originName,
+    String? destinationName,
   }) async {
     final json = await _post('/route/analyze', {
       'origin_lat': originLat,
@@ -188,6 +190,8 @@ class ApiService {
       'dest_lat': destLat,
       'dest_lng': destLng,
       if (weather != null) 'weather': weather.toJson(),
+      'origin_name': ?originName,
+      'destination_name': ?destinationName,
     });
     try {
       return RouteResponse.fromJson(json);
@@ -196,6 +200,21 @@ class ApiService {
         'The server returned an invalid route assessment.',
       );
     }
+  }
+
+  Future<void> endTrip(int id) async {
+    await _post('/trips/$id/end', {});
+  }
+
+  Future<void> recordTripLocation(
+    int id,
+    double latitude,
+    double longitude,
+  ) async {
+    await _post('/trips/$id/locations', {
+      'latitude': latitude,
+      'longitude': longitude,
+    });
   }
 
   Future<SosReceipt> triggerSOS({
