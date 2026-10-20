@@ -4,5 +4,6 @@
   "editor.guides.highlightActiveIndentation": false,
   "editor.guides.bracketPairs": false,
   "editor.renderLineHighlight": "none",
-  "java.compile.nullAnalysis.mode": "automatic"
+  "java.compile.nullAnalysis.mode": "automatic",
+  "java.import.gradle.java.home": "C:\\Program Files\\Android\\Android Studio\\jbr"
 }

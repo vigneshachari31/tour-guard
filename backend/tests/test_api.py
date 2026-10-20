@@ -49,7 +49,7 @@ def test_register_login_duplicate_and_persisted_sos(client):
     assert login.status_code == 200
     headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
     # Tourist JWTs must never receive the rescue command data feed.
-    assert client.get("/api/v1/admin/sos-events", headers=headers).status_code == 403
+    assert client.get("/api/v1/admin/incidents", headers=headers).status_code == 403
     body = {"tourist_id": account["tourist_id"], "latitude": 11.4, "longitude": 76.7}
     assert client.post("/api/v1/sos/trigger", json=body).status_code == 401
     result = client.post("/api/v1/sos/trigger", json=body, headers=headers)

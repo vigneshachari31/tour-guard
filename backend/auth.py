@@ -30,22 +30,13 @@ def verify_password(password: str, hashed_password: str | None) -> bool:
     return valid and hashed_password is not None
 
 
-<<<<<<< HEAD
-def create_access_token(user: User) -> str:
-=======
 def create_access_token(user_id: int, role: str = "tourist") -> str:
->>>>>>> e2f60aa148e362ce2472a0aa4680086ef97e4f15
     settings = get_settings()
     now = datetime.now(UTC)
     return jwt.encode(
         {
-<<<<<<< HEAD
-            "sub": str(user.id),
-            "role": user.role,
-=======
             "sub": str(user_id),
             "role": role,
->>>>>>> e2f60aa148e362ce2472a0aa4680086ef97e4f15
             "iat": now,
             "exp": now + timedelta(minutes=settings.access_token_minutes),
             "iss": settings.jwt_issuer,
@@ -86,39 +77,8 @@ def get_current_user(
     return user
 
 
-<<<<<<< HEAD
-def get_current_admin(
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
-    db: Annotated[Session, Depends(get_db)],
-) -> User:
-    """Require an admin role from a verified JWT and the current database user."""
-    forbidden = HTTPException(403, "Administrator access is required")
-    if credentials is None:
-        raise HTTPException(401, "Invalid or expired credentials", headers={"WWW-Authenticate": "Bearer"})
-    settings = get_settings()
-    try:
-        payload = jwt.decode(
-            credentials.credentials,
-            settings.jwt_secret.get_secret_value(),
-            algorithms=["HS256"], issuer=settings.jwt_issuer, audience=settings.jwt_audience,
-            options={"require": ["sub", "exp", "iat", "iss", "aud", "role"]},
-        )
-        if payload.get("role") != "admin":
-            raise forbidden
-        user_id = int(payload["sub"])
-    except HTTPException:
-        raise
-    except (jwt.InvalidTokenError, ValueError, TypeError) as exc:
-        raise HTTPException(401, "Invalid or expired credentials", headers={"WWW-Authenticate": "Bearer"}) from exc
-    user = db.get(User, user_id)
-    if user is None:
-        raise HTTPException(401, "Invalid or expired credentials", headers={"WWW-Authenticate": "Bearer"})
-    if user.role != "admin":
-        raise forbidden
-=======
 def verify_admin(user: Annotated[User, Depends(get_current_user)]) -> User:
     # Database role is authoritative: role changes revoke access immediately.
     if user.role != "admin":
         raise HTTPException(403, "Administrator access required")
->>>>>>> e2f60aa148e362ce2472a0aa4680086ef97e4f15
     return user

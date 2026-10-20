@@ -28,11 +28,7 @@ if __package__:
     from .risk_engine import assess_risk, fetch_route, nearby_hazards
     from .routers.admin import router as admin_router
     from .routers.profile import router as profile_router
-<<<<<<< HEAD
-    from .routers.admin import router as admin_router
-=======
     from .routers.trips import router as trips_router
->>>>>>> e2f60aa148e362ce2472a0aa4680086ef97e4f15
     from .schemas import (
         HazardReportRequest,
         HazardReportResponse,
@@ -58,11 +54,7 @@ else:
     from risk_engine import assess_risk, fetch_route, nearby_hazards
     from routers.admin import router as admin_router
     from routers.profile import router as profile_router
-<<<<<<< HEAD
-    from routers.admin import router as admin_router
-=======
     from routers.trips import router as trips_router
->>>>>>> e2f60aa148e362ce2472a0aa4680086ef97e4f15
     from schemas import (
         HazardReportRequest,
         HazardReportResponse,
@@ -103,11 +95,7 @@ def get_http(request: Request) -> httpx.Client:
 
 def token_for(user: User) -> TokenResponse:
     return TokenResponse(
-<<<<<<< HEAD
-        access_token=create_access_token(user),
-=======
         access_token=create_access_token(user.id, user.role),
->>>>>>> e2f60aa148e362ce2472a0aa4680086ef97e4f15
         tourist_id=user.tourist_id,
         expires_in=get_settings().access_token_minutes * 60,
         role=user.role,
@@ -125,18 +113,12 @@ def create_app() -> FastAPI:
             if settings.cors_allow_localhost
             else None
         ),
-<<<<<<< HEAD
-        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-=======
         allow_methods=["GET", "POST", "PUT", "PATCH"],
->>>>>>> e2f60aa148e362ce2472a0aa4680086ef97e4f15
         allow_headers=["Authorization", "Content-Type"],
     )
 
     app.include_router(profile_router)
     app.include_router(admin_router)
-<<<<<<< HEAD
-=======
     app.include_router(trips_router)
 
     login_attempts: dict[str, deque[float]] = {}
@@ -173,7 +155,6 @@ def create_app() -> FastAPI:
             response.headers["Referrer-Policy"] = "no-referrer"
             response.headers["X-Frame-Options"] = "DENY"
         return response
->>>>>>> e2f60aa148e362ce2472a0aa4680086ef97e4f15
 
     @app.exception_handler(SQLAlchemyError)
     async def database_error(request: Request, exc: SQLAlchemyError) -> JSONResponse:

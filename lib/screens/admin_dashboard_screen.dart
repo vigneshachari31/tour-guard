@@ -145,7 +145,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   Widget _body() {
     if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_error != null)
+    if (_error != null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -155,6 +155,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
         ),
       );
+    }
     return Padding(
       padding: const EdgeInsets.all(20),
       child: switch (_tab) {

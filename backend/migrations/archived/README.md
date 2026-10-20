@@ -1,0 +1,1 @@
+The archived 0005_admin_command.py.txt came from a conflicting merge and duplicated revision 0005. The active migration chain is 0005_account_roles_trips -> 0006_rescue_history -> 0007_admin_workflows. Keep the old script for reference only; do not execute it. No database changes were made when archiving it.

@@ -384,8 +384,9 @@ class ApiService {
       method: 'GET',
     );
     final items = result['items'] ?? result;
-    if (items is! List)
+    if (items is! List) {
       throw const ApiException('Invalid hazard-zone response.');
+    }
     return items
         .map((item) => AdminHazard.fromJson(item as Map<String, dynamic>))
         .toList();
@@ -479,8 +480,9 @@ class ApiService {
         'Accept': 'application/json',
         if (token != null) 'Authorization': 'Bearer $token',
       });
-      if (method != 'GET' && method != 'DELETE')
+      if (method != 'GET' && method != 'DELETE') {
         request.body = jsonEncode(body);
+      }
       final response = await _client
           .send(request)
           .then(http.Response.fromStream)
