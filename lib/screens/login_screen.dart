@@ -50,7 +50,7 @@ class _LoginScreenState extends State<LoginScreen> {
           content: Text(
             error is ApiException
                 ? error.message
-                : 'Unable to sign in. Please retry again.',
+                : 'Unable to sign in. Please retry.',
           ),
         ),
       );
