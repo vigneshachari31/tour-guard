@@ -20,6 +20,7 @@ class HazardSummary {
 }
 
 class RouteResponse {
+  final int? tripId;
   final List<LatLng> points;
   final double distanceMeters, durationSeconds, bufferMeters;
   final String riskLevel, method;
@@ -27,6 +28,7 @@ class RouteResponse {
   final List<HazardSummary> hazards;
   final bool weatherUsed;
   const RouteResponse({
+    this.tripId,
     required this.points,
     required this.distanceMeters,
     required this.durationSeconds,
@@ -70,6 +72,7 @@ class RouteResponse {
     }
 
     return RouteResponse(
+      tripId: json['trip_id'] as int?,
       points: points,
       distanceMeters: metric('distance_meters'),
       durationSeconds: metric('duration_seconds'),

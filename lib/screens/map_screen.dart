@@ -439,10 +439,19 @@ class _MapScreenState extends State<MapScreen> {
         originLng: start.longitude,
         destLat: end.latitude,
         destLng: end.longitude,
+        originName: _sourceName,
+        destinationName: _destinationName ?? _destinationController.text,
       );
       if (!mounted ||
           requestId != _routeRequestId ||
           tripRevision != _trips.revision) {
+        if (result.tripId != null) {
+          try {
+            await (widget.api ?? ApiService.instance).endTrip(result.tripId!);
+          } catch (_) {
+            /* Can be reconciled on the next route search. */
+          }
+        }
         return;
       }
       setState(() {
@@ -463,6 +472,28 @@ class _MapScreenState extends State<MapScreen> {
       );
       _fitRouteBounds();
       widget.onAnalyzed?.call(result);
+      // Only an actual device GPS observation is published; manual origins are not GPS.
+      if (result.tripId != null &&
+          _userGpsLocation == start &&
+          _sourceName == 'Current Location') {
+        try {
+          await (widget.api ?? ApiService.instance).recordTripLocation(
+            result.tripId!,
+            start.latitude,
+            start.longitude,
+          );
+        } catch (_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Route saved, but GPS sharing failed. Retry using current location.',
+                ),
+              ),
+            );
+          }
+        }
+      }
     } catch (error) {
       if (!mounted || requestId != _routeRequestId) return;
       setState(

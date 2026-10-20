@@ -13,7 +13,18 @@ from sqlalchemy.pool import StaticPool
 
 from backend.database import get_db
 from backend.main import create_app
-from backend.models import SOSEvent, User, UserProfile
+from backend.models import (
+    AuditLog,
+    LocationHistory,
+    RescueAssignment,
+    Responder,
+    RiskAssessmentLog,
+    SOSEvent,
+    SOSHistory,
+    Trip,
+    User,
+    UserProfile,
+)
 
 
 @pytest.fixture
@@ -25,6 +36,8 @@ def client():
     User.__table__.create(engine)
     UserProfile.__table__.create(engine)
     SOSEvent.__table__.create(engine)
+    for model in [Trip, LocationHistory, RiskAssessmentLog, Responder, SOSHistory, RescueAssignment, AuditLog]:
+        model.__table__.create(engine)
     app = create_app()
 
     def database():

@@ -198,6 +198,8 @@ void main() {
           'origin_lng': 76.695,
           'dest_lat': 11.45,
           'dest_lng': 76.60,
+          'origin_name': 'Ooty Source',
+          'destination_name': 'Pykara Destination',
         });
         expect(find.byType(FlutterMap), findsOneWidget);
         if (fails) {

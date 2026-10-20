@@ -204,3 +204,11 @@ Registration tests run in isolated in-memory SQLite, never through the running
 API. RUN_LIVE_AUTH_TESTS no longer enables live writes. PostGIS tests only accept
 a separate database named tour_guard_test and roll back test records. See
 TEST_ACCOUNT_CLEANUP.md for the audit and pending cleanup approval.
+
+## Admin and rescue console
+
+The connected React admin dashboard is in `admin_dashboard/`. Build it with
+`npm.cmd ci --prefix admin_dashboard` and `npm.cmd run build --prefix admin_dashboard`,
+then restart FastAPI and open `/admin/`. Apply migrations through revision `0007`
+before running the new backend. See [admin setup and workflows](../admin_dashboard/README.md)
+for safe bootstrap, API behavior, schema reconciliation and isolated test commands.

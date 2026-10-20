@@ -7,7 +7,7 @@ import httpx
 from fastapi import HTTPException
 from geoalchemy2 import Geography
 from pydantic import ValidationError
-from sqlalchemy import cast, func, select
+from sqlalchemy import cast, func, or_, select
 from sqlalchemy.orm import Session
 
 try:
@@ -84,6 +84,11 @@ def nearby_hazards(
         select(HazardZone)
         .where(
             HazardZone.is_active.is_(True),
+<<<<<<< HEAD
+=======
+            or_(HazardZone.valid_from.is_(None), HazardZone.valid_from <= func.now()),
+            or_(HazardZone.valid_until.is_(None), HazardZone.valid_until > func.now()),
+>>>>>>> e2f60aa148e362ce2472a0aa4680086ef97e4f15
             func.ST_DWithin(
                 cast(HazardZone.geometry, Geography(srid=4326)), route, buffer_meters
             )

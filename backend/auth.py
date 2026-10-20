@@ -30,13 +30,22 @@ def verify_password(password: str, hashed_password: str | None) -> bool:
     return valid and hashed_password is not None
 
 
+<<<<<<< HEAD
 def create_access_token(user: User) -> str:
+=======
+def create_access_token(user_id: int, role: str = "tourist") -> str:
+>>>>>>> e2f60aa148e362ce2472a0aa4680086ef97e4f15
     settings = get_settings()
     now = datetime.now(UTC)
     return jwt.encode(
         {
+<<<<<<< HEAD
             "sub": str(user.id),
             "role": user.role,
+=======
+            "sub": str(user_id),
+            "role": role,
+>>>>>>> e2f60aa148e362ce2472a0aa4680086ef97e4f15
             "iat": now,
             "exp": now + timedelta(minutes=settings.access_token_minutes),
             "iss": settings.jwt_issuer,
@@ -72,11 +81,12 @@ def get_current_user(
     except (jwt.InvalidTokenError, ValueError, TypeError) as exc:
         raise unauthorized from exc
     user = db.get(User, user_id)
-    if user is None:
+    if user is None or not user.is_active:
         raise unauthorized
     return user
 
 
+<<<<<<< HEAD
 def get_current_admin(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
     db: Annotated[Session, Depends(get_db)],
@@ -105,4 +115,10 @@ def get_current_admin(
         raise HTTPException(401, "Invalid or expired credentials", headers={"WWW-Authenticate": "Bearer"})
     if user.role != "admin":
         raise forbidden
+=======
+def verify_admin(user: Annotated[User, Depends(get_current_user)]) -> User:
+    # Database role is authoritative: role changes revoke access immediately.
+    if user.role != "admin":
+        raise HTTPException(403, "Administrator access required")
+>>>>>>> e2f60aa148e362ce2472a0aa4680086ef97e4f15
     return user

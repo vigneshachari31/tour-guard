@@ -62,6 +62,8 @@ class RouteRequest(InputModel):
     origin_lng: Longitude
     dest_lat: Latitude
     dest_lng: Longitude
+    origin_name: str | None = Field(default=None, max_length=255)
+    destination_name: str | None = Field(default=None, max_length=255)
     weather: WeatherObservation | None = None
 
 
@@ -89,6 +91,7 @@ class RiskAssessment(BaseModel):
 
 
 class RouteResponse(BaseModel):
+    trip_id: int | None = None
     geometry: RouteGeometry
     distance_meters: float
     duration_seconds: float

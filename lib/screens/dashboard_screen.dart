@@ -29,6 +29,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   // Current active tab index in the Bottom Navigation Bar
   int _currentTabIndex = 0;
+  bool _endingTrip = false;
   final _destinationController = TextEditingController();
   final _originController = TextEditingController();
   ActiveTripState get _trips => widget.tripState ?? ActiveTripState.instance;
@@ -55,6 +56,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _originController.dispose();
     _destinationController.dispose();
     super.dispose();
+  }
+
+  Future<void> _endTrip() async {
+    if (_endingTrip) return;
+    final trip = _trips.trip;
+    setState(() => _endingTrip = true);
+    try {
+      if (trip?.route.tripId != null) {
+        await ApiService.instance.endTrip(trip!.route.tripId!);
+      }
+      if (identical(_trips.trip, trip)) _trips.clear();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              error is ApiException
+                  ? error.message
+                  : 'Unable to end trip. Please retry.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _endingTrip = false);
+    }
   }
 
   // Navigation helper to open the interactive map & routing screen
@@ -477,7 +504,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const DashboardHeader(),
               const SizedBox(height: 16),
               const Text(
-                'RESCUE DASHBOARD & ACTIVE ALERTS',
+                'YOUR SOS RECORDS & ALERTS',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w800,
@@ -556,7 +583,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                             SizedBox(height: 6),
                             Text(
-                              'All travel sectors monitored by Tour Guard are currently reporting normal conditions.',
+                              'You have no active SOS records. This does not indicate current travel conditions.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 13,
@@ -716,7 +743,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const SizedBox(height: 16),
 
                     // 2. AI Safety Status & Live Environmental Card (Compact)
-                    RouteRiskCard(trip: _trips.trip, onEndTrip: _trips.clear),
+                    RouteRiskCard(
+                      trip: _trips.trip,
+                      onEndTrip: _endingTrip ? null : _endTrip,
+                    ),
                     const SizedBox(height: 18),
 
                     // 3. Destination Search Bar
