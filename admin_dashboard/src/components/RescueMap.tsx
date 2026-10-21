@@ -1,4 +1,4 @@
-﻿import { useEffect } from "react";
+import { useEffect } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -15,7 +15,9 @@ import L from "leaflet";
 import type { Hazards, Incident, Trip } from "../types";
 import { Link } from "react-router-dom";
 import "leaflet/dist/leaflet.css";
+
 type Point = [number, number];
+
 function Fit({ points }: { points: Point[] }) {
   const map = useMap();
   const key = JSON.stringify(points);
@@ -26,6 +28,7 @@ function Fit({ points }: { points: Point[] }) {
   }, [key, map]);
   return null;
 }
+
 function Draw({
   points,
   onChange,
@@ -39,7 +42,7 @@ function Draw({
   return (
     <>
       {points.length >= 3 && (
-        <Polygon positions={points} pathOptions={{ color: "#087f78" }} />
+        <Polygon positions={points} pathOptions={{ color: "#087CF0" }} />
       )}
       {points.map((point, i) => (
         <Marker
@@ -64,6 +67,7 @@ function Draw({
     </>
   );
 }
+
 export default function RescueMap({
   incidents = [],
   hazards,
@@ -89,6 +93,7 @@ export default function RescueMap({
     else if (f.geometry.type === "Point")
       hazardPoints.push([f.geometry.coordinates[1], f.geometry.coordinates[0]]);
   });
+
   return (
     <MapContainer
       center={[20.59, 78.96]}
@@ -97,16 +102,17 @@ export default function RescueMap({
       scrollWheelZoom
     >
       <TileLayer
-        attribution="&copy; OpenStreetMap contributors"
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution='Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, METI, TomTom'
+        url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
+        maxZoom={18}
       />
       {hazards && (
         <GeoJSON
           key={JSON.stringify(hazards)}
           data={hazards}
-          style={{ color: "#d88b35", weight: 2, fillOpacity: 0.17 }}
+          style={{ color: "#E08700", weight: 2, fillOpacity: 0.17 }}
           pointToLayer={(_, p) =>
-            L.circleMarker(p, { radius: 7, color: "#d88b35" })
+            L.circleMarker(p, { radius: 7, color: "#E08700" })
           }
           onEachFeature={(f, layer) => {
             const label = document.createElement("span");
@@ -123,7 +129,7 @@ export default function RescueMap({
           pathOptions={{
             color: "#fff",
             weight: 2,
-            fillColor: "#e34c59",
+            fillColor: "#DC2626",
             fillOpacity: 1,
           }}
         >
@@ -137,13 +143,14 @@ export default function RescueMap({
       {route.length > 0 && (
         <Polyline
           positions={route}
-          pathOptions={{ color: "#15847b", weight: 4 }}
+          pathOptions={{ color: "#087CF0", weight: 4 }}
         />
       )}
       {trip?.last_latitude != null && trip.last_longitude != null && (
         <CircleMarker
           center={[trip.last_latitude, trip.last_longitude]}
           radius={8}
+          pathOptions={{ color: "#1EAA55", fillColor: "#1EAA55", fillOpacity: 0.9 }}
         >
           <Popup>Last received GPS position</Popup>
         </CircleMarker>

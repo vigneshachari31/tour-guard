@@ -1,4 +1,4 @@
-﻿import { lazy, Suspense } from "react";
+import { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./auth";
@@ -13,7 +13,6 @@ const Hazards = lazy(() => import("./pages/Hazards"));
 const Trips = lazy(() => import("./pages/Trips"));
 const RiskHistory = lazy(() => import("./pages/RiskHistory"));
 const Users = lazy(() => import("./pages/Users"));
-const AuditLogs = lazy(() => import("./pages/AuditLogs"));
 import "./style.css";
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <BrowserRouter basename="/admin">
@@ -31,7 +30,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="trips" element={<Trips />} />
               <Route path="risk" element={<RiskHistory />} />
               <Route path="users" element={<Users />} />
-              <Route path="audit" element={<AuditLogs />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
