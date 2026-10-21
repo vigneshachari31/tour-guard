@@ -114,7 +114,7 @@ class SOSResponse(BaseModel):
     longitude: float
     status: Literal["active", "acknowledged", "dispatched", "resolved"]
     created_at: datetime
-    message: str = "SOS recorded. Responder dispatch is not confirmed."
+    message: str = "SOS recorded. Responder dispatchh is not confirmed."
 
 
 class SOSEventsListResponse(BaseModel):
