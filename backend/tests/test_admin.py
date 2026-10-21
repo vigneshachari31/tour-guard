@@ -268,6 +268,7 @@ def test_soft_deactivation_revokes_existing_token_and_blocks_login(client):
 
 
 def test_trip_risk_history_and_location_ownership(client, monkeypatch):
+    monkeypatch.setattr("backend.geofencing.hazards_at_location", lambda *args: [])
     from backend.main import get_http
     from backend.schemas import RouteGeometry
 

@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
+import '../models/geofence_update.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -136,7 +138,8 @@ class AdminHazard {
   bool get isPoint => geometryType == 'Point';
   factory AdminHazard.fromJson(Map<String, dynamic> json) {
     final properties = json['properties'] as Map<String, dynamic>? ?? json;
-    final geometry = (json['geometry'] as Map<String, dynamic>?) ??
+    final geometry =
+        (json['geometry'] as Map<String, dynamic>?) ??
         (properties['geometry'] as Map<String, dynamic>?) ??
         const {};
     final geometryType = geometry['type'] as String? ?? 'Unknown';
@@ -150,33 +153,31 @@ class AdminHazard {
       severity: (properties['severity'] ?? json['severity'] ?? 1) as int,
       source:
           (properties['source'] ?? json['source'] ?? 'Not recorded') as String,
-      isActive:
-          (properties['is_active'] ?? json['is_active'] ?? true) as bool,
+      isActive: (properties['is_active'] ?? json['is_active'] ?? true) as bool,
       geometryType: geometryType,
-      polygonCoordinates:
-          geometryType == 'Polygon' && rawCoordinates is List
-              ? rawCoordinates
-                  .map(
-                    (ring) => (ring as List)
-                        .map(
-                          (point) => [
-                            (point[0] as num).toDouble(),
-                            (point[1] as num).toDouble(),
-                          ],
-                        )
-                        .toList(),
-                  )
-                  .toList()
-              : const [],
+      polygonCoordinates: geometryType == 'Polygon' && rawCoordinates is List
+          ? rawCoordinates
+                .map(
+                  (ring) => (ring as List)
+                      .map(
+                        (point) => [
+                          (point[0] as num).toDouble(),
+                          (point[1] as num).toDouble(),
+                        ],
+                      )
+                      .toList(),
+                )
+                .toList()
+          : const [],
       pointCoordinates:
           geometryType == 'Point' &&
-                  rawCoordinates is List &&
-                  rawCoordinates.length >= 2
-              ? [
-                (rawCoordinates[0] as num).toDouble(),
-                (rawCoordinates[1] as num).toDouble(),
-              ]
-              : null,
+              rawCoordinates is List &&
+              rawCoordinates.length >= 2
+          ? [
+              (rawCoordinates[0] as num).toDouble(),
+              (rawCoordinates[1] as num).toDouble(),
+            ]
+          : null,
     );
   }
 }
@@ -318,15 +319,22 @@ class ApiService {
     await _post('/trips/$id/end', {});
   }
 
-  Future<void> recordTripLocation(
+  Future<GeofenceUpdate> recordTripLocation(
     int id,
     double latitude,
     double longitude,
   ) async {
-    await _post('/trips/$id/locations', {
+    final response = await _post('/trips/$id/locations', {
       'latitude': latitude,
       'longitude': longitude,
     });
+    try {
+      return GeofenceUpdate.fromJson(response);
+    } catch (_) {
+      throw const ApiException(
+        'Hazard monitoring response is invalid. Please update the backend.',
+      );
+    }
   }
 
   Future<SosReceipt> triggerSOS({

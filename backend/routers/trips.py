@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+import json
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,12 +10,16 @@ if __package__ == "backend.routers":
     from ..admin_schemas import LocationInput
     from ..auth import get_current_user
     from ..database import get_db
+    from ..geofencing import evaluate_location
     from ..models import LocationHistory, Trip, User
+    from ..schemas import TripLocationResponse
 else:
     from admin_schemas import LocationInput
     from auth import get_current_user
     from database import get_db
+    from geofencing import evaluate_location
     from models import LocationHistory, Trip, User
+    from schemas import TripLocationResponse
 
 router = APIRouter(prefix="/api/v1/trips", tags=["Trips"])
 DB = Annotated[Session, Depends(get_db)]
@@ -37,17 +42,18 @@ def end_trip(identity: int, user: CurrentUser, db: DB):
     trip = owned_trip(db, user, identity)
     if trip.status == "active":
         trip.status = "completed"
-        trip.ended_at = datetime.now(timezone.utc)
+        trip.ended_at = datetime.now(UTC)
     db.commit()
     return {"id": trip.id, "status": trip.status}
 
 
-@router.post("/{identity}/locations", status_code=201)
+@router.post("/{identity}/locations", status_code=201, response_model=TripLocationResponse)
 def location(identity: int, body: LocationInput, user: CurrentUser, db: DB):
     trip = owned_trip(db, user, identity)
     if trip.status != "active":
         raise HTTPException(409, "Trip is no longer active")
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
+    current, alerts = evaluate_location(db, trip, body.latitude, body.longitude, now)
     trip.last_latitude, trip.last_longitude = body.latitude, body.longitude
     trip.last_location_updated_at = now
     db.add(
@@ -56,7 +62,14 @@ def location(identity: int, body: LocationInput, user: CurrentUser, db: DB):
             latitude=body.latitude,
             longitude=body.longitude,
             recorded_at=now,
+            current_hazards=json.dumps(current),
+            hazard_alerts=json.dumps(alerts),
         )
     )
     db.commit()
-    return {"trip_id": trip.id, "recorded_at": now}
+    return {
+        "trip_id": trip.id,
+        "recorded_at": now,
+        "current_hazards": current,
+        "alerts": alerts,
+    }

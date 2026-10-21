@@ -34,6 +34,15 @@ export default function Trips() {
       {trip && (
         <>
           <RescueMap trip={trip} hazards={hazards.data} />
+          <section className="panel" aria-label="Hazard entry history">
+            <h2>Recent hazard entries</h2>
+            {(trip.recent_hazard_alerts ?? []).map((alert, index) => (
+              <p key={`${alert.hazard_id}-${alert.detected_at}-${index}`}>
+                {alert.name} · {alert.hazard_type} · Severity {alert.severity}/5 · {date(alert.detected_at)}
+              </p>
+            ))}
+            {!trip.recent_hazard_alerts?.length && <p>No hazard entries recorded.</p>}
+          </section>
           <p className="map-caption">
             {trip.source_name} → {trip.destination_name} · GPS updates older
             than 15 minutes are stale.
@@ -64,6 +73,11 @@ export default function Trips() {
               ),
             },
             { title: "Status", render: (t) => <Badge>{t.status}</Badge> },
+            { title: "Last GPS hazard check", render: (t) => (
+              <>{(t.current_hazards ?? []).map((h) => (
+                <small key={h.hazard_id}>{h.name} · {h.hazard_type} · {h.severity}/5</small>
+              ))}{!t.current_hazards?.length && "No zones reported"}</>
+            ) },
             {
               title: "Risk",
               render: (t) => <Badge>{t.risk_level || "Not assessed"}</Badge>,

@@ -55,15 +55,45 @@ class RouteRiskCard extends StatelessWidget {
             if (result == null)
               const Text('Search for a destination to assess your route.')
             else ...[
-              const Text('Heuristic assessment of available hazard data'),
-              for (final reason in result.reasons) Text(reason),
-              for (final hazard in result.hazards)
-                Text(
-                  '${hazard.name}: ${hazard.hazardType} (severity ${hazard.severity}/5)',
-                ),
+              Text(
+                result.hazards.isEmpty
+                    ? 'No hazards reported along this route.'
+                    : '${result.hazards.length} reported hazard zone(s) along your route.',
+              ),
               if (!result.weatherUsed)
-                const Text('Weather was not included in this assessment.'),
-              for (final limitation in result.limitations) Text(limitation),
+                const Text(
+                  'Live weather not assessed.',
+                  style: TextStyle(color: Colors.blueGrey, fontSize: 12),
+                ),
+              const Text(
+                'Route estimate, not a live safety guarantee.',
+                style: TextStyle(color: Colors.blueGrey, fontSize: 12),
+              ),
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(bottom: 12),
+                title: const Text(
+                  'Assessment details',
+                  style: TextStyle(fontSize: 14),
+                ),
+                children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        for (final hazard in result.hazards)
+                          Text(
+                            '${hazard.name}: ${hazard.hazardType.replaceAll('_', ' ')} (severity ${hazard.severity}/5)',
+                          ),
+                        for (final reason in result.reasons) Text(reason),
+                        for (final limitation in result.limitations)
+                          Text(limitation),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
               if (trip != null && onEndTrip != null) ...[
                 const SizedBox(height: 8),
                 TextButton.icon(

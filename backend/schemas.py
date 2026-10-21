@@ -219,3 +219,26 @@ class AdminHazardResponse(InputModel):
     # validated Polygon (AdminHazardCreate above).
     geometry: dict[str, Any]
     updated_at: datetime | None
+
+
+class GeofenceHazard(BaseModel):
+    hazard_id: int
+    name: str
+    hazard_type: str
+    severity: int
+
+
+class HazardEntry(GeofenceHazard):
+    trip_id: int
+    tourist_id: str
+    latitude: Latitude
+    longitude: Longitude
+    detected_at: datetime
+    kind: Literal["hazard_entry"]
+
+
+class TripLocationResponse(BaseModel):
+    trip_id: int
+    recorded_at: datetime
+    current_hazards: list[GeofenceHazard]
+    alerts: list[HazardEntry]

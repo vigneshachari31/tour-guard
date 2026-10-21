@@ -31,7 +31,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _currentTabIndex = 0;
   bool _endingTrip = false;
   final _destinationController = TextEditingController();
-  final _originController = TextEditingController();
   ActiveTripState get _trips => widget.tripState ?? ActiveTripState.instance;
 
   @override
@@ -42,7 +41,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _syncTrip() {
-    _originController.text = _trips.trip?.originName ?? '';
     _destinationController.text = _trips.trip?.destinationName ?? '';
   }
 
@@ -53,7 +51,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void dispose() {
     _trips.removeListener(_tripChanged);
-    _originController.dispose();
     _destinationController.dispose();
     super.dispose();
   }
@@ -752,8 +749,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     // 3. Destination Search Bar
                     SearchDestinationBar(
                       controller: _destinationController,
-                      originController: _originController,
-                      onOriginTap: () => _navigateToMap(),
                       onSubmitted: (query) => _navigateToMap(query),
                       onGpsTap: () => _navigateToMap(null, true),
                     ),

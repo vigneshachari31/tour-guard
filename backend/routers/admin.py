@@ -25,6 +25,7 @@ if __package__ == "backend.routers":
     from ..models import (
         AuditLog,
         HazardZone,
+        LocationHistory,
         RescueAssignment,
         Responder,
         RiskAssessmentLog,
@@ -51,6 +52,7 @@ else:
     from models import (
         AuditLog,
         HazardZone,
+        LocationHistory,
         RescueAssignment,
         Responder,
         RiskAssessmentLog,
@@ -216,6 +218,15 @@ def trip_dict(db, trip):
         .limit(1)
     )
     result["risk_level"] = risk.risk_level if risk else None
+    latest = db.scalar(select(LocationHistory).where(LocationHistory.trip_id == trip.id)
+                       .order_by(LocationHistory.id.desc()).limit(1))
+    result["current_hazards"] = json.loads(latest.current_hazards or "[]") if latest else []
+    recent = db.scalars(select(LocationHistory).where(
+        LocationHistory.trip_id == trip.id,
+        LocationHistory.hazard_alerts.is_not(None),
+        LocationHistory.hazard_alerts != "[]",
+    ).order_by(LocationHistory.id.desc()).limit(20))
+    result["recent_hazard_alerts"] = [a for item in recent for a in json.loads(item.hazard_alerts)]
     return result
 
 

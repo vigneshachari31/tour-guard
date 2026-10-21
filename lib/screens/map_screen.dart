@@ -704,28 +704,7 @@ class _MapScreenState extends State<MapScreen> {
       );
       _fitRouteBounds();
       widget.onAnalyzed?.call(result);
-      // Only an actual device GPS observation is published; manual origins are not GPS.
-      if (result.tripId != null &&
-          _userGpsLocation == start &&
-          _sourceName == 'Current Location') {
-        try {
-          await (widget.api ?? ApiService.instance).recordTripLocation(
-            result.tripId!,
-            start.latitude,
-            start.longitude,
-          );
-        } catch (_) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Route saved, but GPS sharing failed. Retry using current location.',
-                ),
-              ),
-            );
-          }
-        }
-      }
+      // TripHazardMonitor publishes fresh device GPS and displays geofence warnings.
     } catch (error) {
       if (!mounted || requestId != _routeRequestId) return;
       setState(

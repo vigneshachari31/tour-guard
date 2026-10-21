@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     osrm_base_url: str = "https://router.project-osrm.org"
     http_timeout_seconds: float = Field(default=15, gt=0, le=60)
     route_buffer_meters: float = Field(default=250, ge=0, le=5000)
+    geofence_point_radius_meters: float = Field(default=100, gt=0, le=5000)
     cors_origins: list[str] = []
     # Opt in only for local Flutter development (random browser ports).
     cors_allow_localhost: bool = False

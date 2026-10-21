@@ -46,7 +46,7 @@ class HazardZone(Base):
     __table_args__ = (
         CheckConstraint("severity BETWEEN 1 AND 5", name="hazard_severity_range"),
         CheckConstraint(
-            "GeometryType(geometry) IN ('POINT', 'POLYGON')",
+            "GeometryType(geometry) IN ('POINT', 'POLYGON', 'MULTIPOLYGON')",
             name="hazard_geometry_type",
         ),
         CheckConstraint(
@@ -154,6 +154,9 @@ class LocationHistory(Base):
     trip_id: Mapped[int] = mapped_column(ForeignKey("trips.id"), index=True)
     latitude: Mapped[float] = mapped_column(Float)
     longitude: Mapped[float] = mapped_column(Float)
+    # Snapshots preserve entry history without creating rescue/SOS incidents.
+    current_hazards: Mapped[str | None] = mapped_column(Text)
+    hazard_alerts: Mapped[str | None] = mapped_column(Text)
     recorded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
