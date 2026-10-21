@@ -10,6 +10,8 @@ import 'package:travel_risk_app/screens/map_screen.dart';
 import 'package:travel_risk_app/state/active_trip_state.dart';
 import 'package:travel_risk_app/screens/dashboard_screen.dart';
 import 'package:travel_risk_app/services/api_service.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:travel_risk_app/models/route_response.dart';
 import 'package:travel_risk_app/services/routing_service.dart';
 
 class MemorySession implements SessionStore {
@@ -275,5 +277,100 @@ void main() {
         api.close();
       },
     );
+
   }
+  testWidgets(
+    'Hazard polygons and markers render on map and toggle with overlay button',
+    (tester) async {
+      final trips = ActiveTripState();
+      final routeWithHazard = RouteResponse(
+        tripId: 42,
+        points: const [LatLng(11.41, 76.69), LatLng(11.45, 76.60)],
+        distanceMeters: 5000,
+        durationSeconds: 600,
+        bufferMeters: 250,
+        riskLevel: 'HIGH RISK',
+        method: 'heuristic_v1',
+        reasons: const ['Landslide zone active'],
+        limitations: const [],
+        weatherUsed: false,
+        hazards: const [
+          HazardSummary(
+            id: 101,
+            name: 'Avalanche Point',
+            hazardType: 'landslide',
+            severity: 4,
+            source: 'District Administration',
+            geometryType: 'Polygon',
+            polygonCoordinates: [
+              [
+                [76.65, 11.42],
+                [76.67, 11.42],
+                [76.67, 11.44],
+                [76.65, 11.44],
+                [76.65, 11.42],
+              ]
+            ],
+          ),
+          HazardSummary(
+            id: 102,
+            name: 'Flash Flood Point',
+            hazardType: 'flood',
+            severity: 3,
+            source: 'Tourist Report',
+            geometryType: 'Point',
+            pointCoordinates: [76.66, 11.43],
+          ),
+        ],
+      );
+
+      final api = ApiService(
+        store: MemorySession(),
+        client: MockClient((_) async => http.Response('{}', 200)),
+      );
+
+      trips.start(
+        ActiveTrip(
+          originName: 'Start',
+          destinationName: 'End',
+          origin: const LatLng(11.41, 76.69),
+          destination: const LatLng(11.45, 76.60),
+          route: routeWithHazard,
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MapScreen(
+            api: api,
+            tripState: trips,
+            tileProvider: BlankTiles(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Check polygon layer is present
+      expect(find.byType(PolygonLayer), findsOneWidget);
+      final polygonLayer = tester.widget<PolygonLayer>(find.byType(PolygonLayer));
+      expect(polygonLayer.polygons.length, 1);
+      expect(polygonLayer.polygons.first.points.length, 5);
+
+      // Check markers
+      final markerLayer = tester.widget<MarkerLayer>(find.byType(MarkerLayer));
+      // 2 hazard markers (1 centroid for polygon + 1 point marker) + 2 route markers = 4 markers
+      expect(markerLayer.markers.length, 4);
+
+      // Toggle hazard overlay off
+      await tester.tap(find.byTooltip('Toggle hazard zones on map'));
+      await tester.pumpAndSettle();
+
+      // Polygons should be hidden
+      expect(find.byType(PolygonLayer), findsNothing);
+      final hiddenMarkers = tester.widget<MarkerLayer>(find.byType(MarkerLayer));
+      expect(hiddenMarkers.markers.length, 2); // only origin & destination pins
+
+      api.close();
+    },
+  );
 }

@@ -61,10 +61,20 @@ export function Table<T extends { id: number }>({
               ))}
             </tr>
           ))}
-          {rows.length === 0 && (
+          {loading && (
+            <tr>
+              <td colSpan={columns.length} className="table-loading-cell">
+                <div className="table-loader-box">
+                  <div className="spinner-blue" />
+                  <span>Loading records...</span>
+                </div>
+              </td>
+            </tr>
+          )}
+          {!loading && rows.length === 0 && (
             <tr>
               <td colSpan={columns.length} className="empty">
-                {loading ? "Loading records?" : "No records found."}
+                No records found.
               </td>
             </tr>
           )}

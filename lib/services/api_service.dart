@@ -135,40 +135,48 @@ class AdminHazard {
   bool get isPolygon => geometryType == 'Polygon';
   bool get isPoint => geometryType == 'Point';
   factory AdminHazard.fromJson(Map<String, dynamic> json) {
-    final geometry = json['geometry'] as Map<String, dynamic>;
+    final properties = json['properties'] as Map<String, dynamic>? ?? json;
+    final geometry = (json['geometry'] as Map<String, dynamic>?) ??
+        (properties['geometry'] as Map<String, dynamic>?) ??
+        const {};
     final geometryType = geometry['type'] as String? ?? 'Unknown';
     final rawCoordinates = geometry['coordinates'];
     return AdminHazard(
-      id: json['id'] as int,
-      name: json['name'] as String,
-      hazardType: json['hazard_type'] as String,
-      severity: json['severity'] as int,
-      source: (json['source'] as String?) ?? 'Not recorded',
-      isActive: json['is_active'] as bool,
+      id: (properties['id'] ?? json['id'] ?? 0) as int,
+      name: (properties['name'] ?? json['name'] ?? 'Hazard Zone') as String,
+      hazardType:
+          (properties['hazard_type'] ?? json['hazard_type'] ?? 'general')
+              as String,
+      severity: (properties['severity'] ?? json['severity'] ?? 1) as int,
+      source:
+          (properties['source'] ?? json['source'] ?? 'Not recorded') as String,
+      isActive:
+          (properties['is_active'] ?? json['is_active'] ?? true) as bool,
       geometryType: geometryType,
-      polygonCoordinates: geometryType == 'Polygon' && rawCoordinates is List
-          ? rawCoordinates
-                .map(
-                  (ring) => (ring as List)
-                      .map(
-                        (point) => [
-                          (point[0] as num).toDouble(),
-                          (point[1] as num).toDouble(),
-                        ],
-                      )
-                      .toList(),
-                )
-                .toList()
-          : const [],
+      polygonCoordinates:
+          geometryType == 'Polygon' && rawCoordinates is List
+              ? rawCoordinates
+                  .map(
+                    (ring) => (ring as List)
+                        .map(
+                          (point) => [
+                            (point[0] as num).toDouble(),
+                            (point[1] as num).toDouble(),
+                          ],
+                        )
+                        .toList(),
+                  )
+                  .toList()
+              : const [],
       pointCoordinates:
           geometryType == 'Point' &&
-              rawCoordinates is List &&
-              rawCoordinates.length >= 2
-          ? [
-              (rawCoordinates[0] as num).toDouble(),
-              (rawCoordinates[1] as num).toDouble(),
-            ]
-          : null,
+                  rawCoordinates is List &&
+                  rawCoordinates.length >= 2
+              ? [
+                (rawCoordinates[0] as num).toDouble(),
+                (rawCoordinates[1] as num).toDouble(),
+              ]
+              : null,
     );
   }
 }
@@ -375,6 +383,24 @@ class ApiService {
         }, method: 'PATCH'),
       );
 
+  Future<List<AdminHazard>> getActiveHazardZones() async {
+    try {
+      final result = await _post(
+        '/hazards/active',
+        {},
+        authenticated: false,
+        method: 'GET',
+      );
+      final items = result['features'] ?? result['items'] ?? result;
+      if (items is! List) return const [];
+      return items
+          .map((item) => AdminHazard.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
   Future<List<AdminHazard>> getAdminHazards({
     bool includeInactive = false,
   }) async {
@@ -383,7 +409,7 @@ class ApiService {
       {},
       method: 'GET',
     );
-    final items = result['items'] ?? result;
+    final items = result['features'] ?? result['items'] ?? result;
     if (items is! List) {
       throw const ApiException('Invalid hazard-zone response.');
     }

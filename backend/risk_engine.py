@@ -1,5 +1,6 @@
 """Transparent demonstration thresholds, not a trained or validated ML model."""
 
+import json
 import math
 from datetime import datetime, timedelta, timezone
 
@@ -80,34 +81,67 @@ def nearby_hazards(
         func.ST_SetSRID(func.ST_GeomFromGeoJSON(geometry.model_dump_json()), 4326),
         Geography(srid=4326),
     )
-    query = (
-        select(HazardZone)
-        .where(
-            HazardZone.is_active.is_(True),
-            or_(HazardZone.valid_from.is_(None), HazardZone.valid_from <= func.now()),
-            or_(HazardZone.valid_until.is_(None), HazardZone.valid_until > func.now()),
-            func.ST_DWithin(
-                cast(HazardZone.geometry, Geography(srid=4326)), route, buffer_meters
+    try:
+        query = (
+            select(HazardZone, func.ST_AsGeoJSON(HazardZone.geometry))
+            .where(
+                HazardZone.is_active.is_(True),
+                or_(HazardZone.valid_from.is_(None), HazardZone.valid_from <= func.now()),
+                or_(HazardZone.valid_until.is_(None), HazardZone.valid_until > func.now()),
+                func.ST_DWithin(
+                    cast(HazardZone.geometry, Geography(srid=4326)), route, buffer_meters
+                ),
             )
+            .order_by(HazardZone.severity.desc(), HazardZone.id)
+            .limit(1001)
         )
-        .order_by(HazardZone.severity.desc(), HazardZone.id)
-        .limit(1001)
-    )
-    hazards = db.scalars(query).all()
-    if len(hazards) > 1000:
-        raise HTTPException(
-            422, "Route intersects too many hazard records; analyze a shorter route"
+        rows = db.execute(query).all()
+        if len(rows) > 1000:
+            raise HTTPException(
+                422, "Route intersects too many hazard records; analyze a shorter route"
+            )
+        return [
+            HazardSummary(
+                id=h.id,
+                name=h.name,
+                hazard_type=h.hazard_type,
+                severity=h.severity,
+                source=h.source or "Source not recorded",
+                geometry=json.loads(geom_str) if geom_str else None,
+            )
+            for h, geom_str in rows
+        ]
+    except HTTPException:
+        raise
+    except Exception:
+        query = (
+            select(HazardZone)
+            .where(
+                HazardZone.is_active.is_(True),
+                or_(HazardZone.valid_from.is_(None), HazardZone.valid_from <= func.now()),
+                or_(HazardZone.valid_until.is_(None), HazardZone.valid_until > func.now()),
+                func.ST_DWithin(
+                    cast(HazardZone.geometry, Geography(srid=4326)), route, buffer_meters
+                ),
+            )
+            .order_by(HazardZone.severity.desc(), HazardZone.id)
+            .limit(1001)
         )
-    return [
-        HazardSummary(
-            id=h.id,
-            name=h.name,
-            hazard_type=h.hazard_type,
-            severity=h.severity,
-            source=h.source or "Source not recorded",
-        )
-        for h in hazards
-    ]
+        hazards = db.scalars(query).all()
+        if len(hazards) > 1000:
+            raise HTTPException(
+                422, "Route intersects too many hazard records; analyze a shorter route"
+            )
+        return [
+            HazardSummary(
+                id=h.id,
+                name=h.name,
+                hazard_type=h.hazard_type,
+                severity=h.severity,
+                source=h.source or "Source not recorded",
+            )
+            for h in hazards
+        ]
 
 
 def assess_risk(

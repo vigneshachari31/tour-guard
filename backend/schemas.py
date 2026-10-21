@@ -80,6 +80,7 @@ class HazardSummary(BaseModel):
     hazard_type: str
     severity: int
     source: str
+    geometry: dict[str, Any] | None = None
 
 
 class RiskAssessment(BaseModel):

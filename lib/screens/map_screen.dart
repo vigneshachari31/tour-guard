@@ -16,6 +16,25 @@ import '../services/routing_service.dart';
 // Original dual-location planner with optional GPS and authenticated route analysis.
 // ==============================================================================
 
+class _MapHazardItem {
+  final int id, severity;
+  final String name, hazardType;
+  final bool isPolygon, isPoint;
+  final List<List<List<double>>> polygonCoordinates;
+  final List<double>? pointCoordinates;
+
+  const _MapHazardItem({
+    required this.id,
+    required this.name,
+    required this.hazardType,
+    required this.severity,
+    required this.isPolygon,
+    required this.isPoint,
+    required this.polygonCoordinates,
+    this.pointCoordinates,
+  });
+}
+
 class MapScreen extends StatefulWidget {
   final ActiveTripState? tripState;
   final String? initialDestination;
@@ -69,6 +88,7 @@ class _MapScreenState extends State<MapScreen> {
 
   // Hazards from Backend
   List<HazardSummary> _nearbyHazards = [];
+  List<AdminHazard> _activeHazards = [];
   bool _isLoadingHazards = false;
   int _gpsRequestId = 0;
   int _routeRequestId = 0;
@@ -118,6 +138,10 @@ class _MapScreenState extends State<MapScreen> {
       _destinationController.text = widget.initialDestination!;
       _searchAndSetDestination(widget.initialDestination!);
     }
+
+    if (widget.api == null) {
+      _loadActiveHazards();
+    }
   }
 
   @override
@@ -148,6 +172,214 @@ class _MapScreenState extends State<MapScreen> {
       _isSearching = false;
       _isLoadingGps = false;
     });
+  }
+
+  Future<void> _loadActiveHazards() async {
+    try {
+      final hazards = await ApiService.instance.getActiveHazardZones();
+      if (mounted) {
+        setState(() {
+          _activeHazards = hazards;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Color _hazardFillColor(int severity) {
+    if (severity >= 4) {
+      return const Color(0xFFDC2626).withValues(alpha: 0.28);
+    } else if (severity == 3) {
+      return const Color(0xFFEA580C).withValues(alpha: 0.25);
+    } else {
+      return const Color(0xFFEAB308).withValues(alpha: 0.22);
+    }
+  }
+
+  Color _hazardStrokeColor(int severity) {
+    if (severity >= 4) {
+      return const Color(0xFFB91C1C);
+    } else if (severity == 3) {
+      return const Color(0xFFC2410C);
+    } else {
+      return const Color(0xFFA16207);
+    }
+  }
+
+  void _showHazardInfo(String name, String type, int severity) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(
+              Icons.warning_amber_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '$name • ${type.toUpperCase()} (Severity $severity/5)',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor:
+            severity >= 4 ? const Color(0xFFDC2626) : const Color(0xFFEA580C),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  List<_MapHazardItem> _collectAllHazards() {
+    final list = <_MapHazardItem>[];
+    final seen = <int>{};
+    for (final h in _nearbyHazards) {
+      if (seen.add(h.id)) {
+        list.add(_MapHazardItem(
+          id: h.id,
+          name: h.name,
+          hazardType: h.hazardType,
+          severity: h.severity,
+          isPolygon: h.isPolygon,
+          isPoint: h.isPoint,
+          polygonCoordinates: h.polygonCoordinates,
+          pointCoordinates: h.pointCoordinates,
+        ));
+      }
+    }
+    for (final h in _activeHazards) {
+      if (seen.add(h.id)) {
+        list.add(_MapHazardItem(
+          id: h.id,
+          name: h.name,
+          hazardType: h.hazardType,
+          severity: h.severity,
+          isPolygon: h.isPolygon,
+          isPoint: h.isPoint,
+          polygonCoordinates: h.polygonCoordinates,
+          pointCoordinates: h.pointCoordinates,
+        ));
+      }
+    }
+    return list;
+  }
+
+  List<Polygon> _buildHazardPolygons() {
+    if (!_showHazardOverlay) return const [];
+    final polygons = <Polygon>[];
+    for (final h in _collectAllHazards()) {
+      if (h.isPolygon && h.polygonCoordinates.isNotEmpty) {
+        for (final ring in h.polygonCoordinates) {
+          if (ring.length >= 3) {
+            polygons.add(
+              Polygon(
+                points: ring.map((pt) => LatLng(pt[1], pt[0])).toList(),
+                color: _hazardFillColor(h.severity),
+                borderColor: _hazardStrokeColor(h.severity),
+                borderStrokeWidth: 2.5,
+              ),
+            );
+          }
+        }
+      }
+    }
+    return polygons;
+  }
+
+  List<Marker> _buildHazardMarkers() {
+    if (!_showHazardOverlay) return const [];
+    final markers = <Marker>[];
+    for (final h in _collectAllHazards()) {
+      if (h.isPoint &&
+          h.pointCoordinates != null &&
+          h.pointCoordinates!.length >= 2) {
+        final pt = h.pointCoordinates!;
+        markers.add(
+          Marker(
+            point: LatLng(pt[1], pt[0]),
+            width: 36,
+            height: 36,
+            child: GestureDetector(
+              onTap: () => _showHazardInfo(h.name, h.hazardType, h.severity),
+              child: Tooltip(
+                message: '${h.name} (${h.hazardType}, Severity ${h.severity}/5)',
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: h.severity >= 4
+                        ? const Color(0xFFDC2626)
+                        : const Color(0xFFF97316),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x33000000),
+                        blurRadius: 4,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.warning_amber_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      } else if (h.isPolygon &&
+          h.polygonCoordinates.isNotEmpty &&
+          h.polygonCoordinates.first.length >= 3) {
+        final ring = h.polygonCoordinates.first;
+        final avgLat =
+            ring.map((p) => p[1]).reduce((a, b) => a + b) / ring.length;
+        final avgLng =
+            ring.map((p) => p[0]).reduce((a, b) => a + b) / ring.length;
+        markers.add(
+          Marker(
+            point: LatLng(avgLat, avgLng),
+            width: 32,
+            height: 32,
+            child: GestureDetector(
+              onTap: () => _showHazardInfo(h.name, h.hazardType, h.severity),
+              child: Tooltip(
+                message: '${h.name} (${h.hazardType}, Severity ${h.severity}/5)',
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: h.severity >= 4
+                        ? const Color(0xFFDC2626)
+                        : const Color(0xFFEA580C),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 1.5),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x33000000),
+                        blurRadius: 4,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.warning_amber_rounded,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+    }
+    return markers;
   }
 
   Future<List<LocationSearchResult>> _searchPlaces(String query) =>
@@ -677,6 +909,12 @@ class _MapScreenState extends State<MapScreen> {
                 userAgentPackageName: 'com.tourguard.travelriskapp',
               ),
 
+              // Hazard Polygons (Shaded Risk Zones)
+              if (_showHazardOverlay)
+                PolygonLayer(
+                  polygons: _buildHazardPolygons(),
+                ),
+
               // Route Polyline (Safe Path)
               if (_routePoints.isNotEmpty)
                 PolylineLayer(
@@ -694,9 +932,10 @@ class _MapScreenState extends State<MapScreen> {
                   ],
                 ),
 
-              // Markers for Source & Destination
+              // Markers for Hazards, Source & Destination
               MarkerLayer(
                 markers: [
+                  ..._buildHazardMarkers(),
                   // LIVE USER GPS / SOURCE MARKER
                   if (_sourceLocation != null)
                     Marker(
@@ -1075,18 +1314,21 @@ class _MapScreenState extends State<MapScreen> {
                       : const Color(0xFF1A2D4F),
                   onPressed: () {
                     setState(() => _showHazardOverlay = !_showHazardOverlay);
+                    if (_showHazardOverlay && _activeHazards.isEmpty && widget.api == null) {
+                      _loadActiveHazards();
+                    }
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
                           _showHazardOverlay
-                              ? 'Hazard details shown in route summary'
-                              : 'Hazard details hidden',
+                              ? 'Hazard zone overlay shown on map'
+                              : 'Hazard overlay hidden',
                         ),
                         duration: const Duration(seconds: 1),
                       ),
                     );
                   },
-                  tooltip: 'Toggle hazard details',
+                  tooltip: 'Toggle hazard zones on map',
                   child: const Icon(Icons.layers_rounded, size: 20),
                 ),
                 const SizedBox(height: 10),

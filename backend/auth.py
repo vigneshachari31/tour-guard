@@ -77,6 +77,33 @@ def get_current_user(
     return user
 
 
+def get_optional_user(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
+    db: Annotated[Session, Depends(get_db)],
+) -> User | None:
+    if credentials is None:
+        return None
+    settings = get_settings()
+    try:
+        payload = jwt.decode(
+            credentials.credentials,
+            settings.jwt_secret.get_secret_value(),
+            algorithms=["HS256"],
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
+            options={"require": ["sub", "exp", "iat", "iss", "aud"]},
+        )
+        user_id = int(payload["sub"])
+        if user_id <= 0:
+            return None
+    except Exception:
+        return None
+    user = db.get(User, user_id)
+    if user is None or not user.is_active:
+        return None
+    return user
+
+
 def verify_admin(user: Annotated[User, Depends(get_current_user)]) -> User:
     # Database role is authoritative: role changes revoke access immediately.
     if user.role != "admin":

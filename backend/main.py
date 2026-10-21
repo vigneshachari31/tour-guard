@@ -11,7 +11,7 @@ import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import func, select, text
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -19,6 +19,7 @@ if __package__:
     from .auth import (
         create_access_token,
         get_current_user,
+        get_optional_user,
         hash_password,
         verify_password,
     )
@@ -45,6 +46,7 @@ else:
     from auth import (
         create_access_token,
         get_current_user,
+        get_optional_user,
         hash_password,
         verify_password,
     )
@@ -327,6 +329,48 @@ def create_app() -> FastAPI:
             events=[SOSResponse.model_validate(e) for e in events],
             total=len(events),
         )
+
+    @app.get(
+        "/api/v1/hazards/active",
+        tags=["Hazards"],
+    )
+    def list_active_hazards(
+        db: DB,
+        user: Annotated[User | None, Depends(get_optional_user)] = None,
+    ):
+        try:
+            stmt = (
+                select(HazardZone, func.ST_AsGeoJSON(HazardZone.geometry))
+                .where(
+                    HazardZone.is_active.is_(True),
+                    or_(HazardZone.valid_from.is_(None), HazardZone.valid_from <= func.now()),
+                    or_(HazardZone.valid_until.is_(None), HazardZone.valid_until > func.now()),
+                )
+                .order_by(HazardZone.id)
+            )
+            features = []
+            for h, geom_str in db.execute(stmt):
+                geom = json.loads(geom_str) if geom_str else None
+                if geom:
+                    features.append({
+                        "type": "Feature",
+                        "id": h.id,
+                        "geometry": geom,
+                        "properties": {
+                            "id": h.id,
+                            "name": h.name,
+                            "hazard_type": h.hazard_type,
+                            "severity": h.severity,
+                            "source": h.source or "Official",
+                            "is_active": h.is_active,
+                        },
+                    })
+            return {
+                "type": "FeatureCollection",
+                "features": features,
+            }
+        except Exception:
+            return {"type": "FeatureCollection", "features": []}
 
     @app.post(
         "/api/v1/hazards/report",

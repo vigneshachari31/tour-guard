@@ -73,7 +73,7 @@ export default function Dashboard() {
       {/* 4 Metric Cards - Matching Image 2 */}
       <div className="metrics-grid">
         {/* 1. Registered Tourists */}
-        <div className="stat-card">
+        <Link to="/users" className="stat-card stat-card-link">
           <div className="stat-card-icon stat-icon-green">
             <Users size={22} />
           </div>
@@ -85,10 +85,10 @@ export default function Dashboard() {
               <span>+2 this week</span>
             </div>
           </div>
-        </div>
+        </Link>
 
         {/* 2. Active Trips */}
-        <div className="stat-card">
+        <Link to="/trips" className="stat-card stat-card-link">
           <div className="stat-card-icon stat-icon-blue">
             <Route size={22} />
           </div>
@@ -100,10 +100,10 @@ export default function Dashboard() {
               <span>Live monitoring</span>
             </div>
           </div>
-        </div>
+        </Link>
 
         {/* 3. Open SOS Incidents */}
-        <div className="stat-card">
+        <Link to="/incidents" className="stat-card stat-card-link">
           <div className="stat-card-icon stat-icon-red">
             <Siren size={22} />
           </div>
@@ -115,10 +115,10 @@ export default function Dashboard() {
               <span>{stats.data?.open_incidents ? `${stats.data.open_incidents} urgent` : "All clear"}</span>
             </div>
           </div>
-        </div>
+        </Link>
 
         {/* 4. Active Hazard Zones */}
-        <div className="stat-card">
+        <Link to="/hazards" className="stat-card stat-card-link">
           <div className="stat-card-icon stat-icon-amber">
             <ShieldAlert size={22} />
           </div>
@@ -129,7 +129,7 @@ export default function Dashboard() {
               <span>Across the region</span>
             </div>
           </div>
-        </div>
+        </Link>
       </div>
 
       {/* Row 2: Charts and Incident Feed matching Image 2 */}

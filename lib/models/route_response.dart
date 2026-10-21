@@ -3,20 +3,62 @@ import 'package:latlong2/latlong.dart';
 class HazardSummary {
   final int id, severity;
   final String name, hazardType, source;
+  final String? geometryType;
+  final List<List<List<double>>> polygonCoordinates;
+  final List<double>? pointCoordinates;
+
   const HazardSummary({
     required this.id,
     required this.name,
     required this.hazardType,
     required this.severity,
     required this.source,
+    this.geometryType,
+    this.polygonCoordinates = const [],
+    this.pointCoordinates,
   });
-  factory HazardSummary.fromJson(Map<String, dynamic> json) => HazardSummary(
-    id: json['id'] as int,
-    name: json['name'] as String,
-    hazardType: json['hazard_type'] as String,
-    severity: json['severity'] as int,
-    source: json['source'] as String,
-  );
+
+  bool get isPolygon => geometryType == 'Polygon';
+  bool get isPoint => geometryType == 'Point';
+
+  factory HazardSummary.fromJson(Map<String, dynamic> json) {
+    final geometry = json['geometry'] as Map<String, dynamic>?;
+    final geometryType = geometry?['type'] as String?;
+    final rawCoordinates = geometry?['coordinates'];
+
+    return HazardSummary(
+      id: json['id'] as int,
+      name: json['name'] as String,
+      hazardType: json['hazard_type'] as String,
+      severity: json['severity'] as int,
+      source: json['source'] as String,
+      geometryType: geometryType,
+      polygonCoordinates:
+          geometryType == 'Polygon' && rawCoordinates is List
+              ? rawCoordinates
+                  .map(
+                    (ring) => (ring as List)
+                        .map(
+                          (point) => [
+                            (point[0] as num).toDouble(),
+                            (point[1] as num).toDouble(),
+                          ],
+                        )
+                        .toList(),
+                  )
+                  .toList()
+              : const [],
+      pointCoordinates:
+          geometryType == 'Point' &&
+                  rawCoordinates is List &&
+                  rawCoordinates.length >= 2
+              ? [
+                (rawCoordinates[0] as num).toDouble(),
+                (rawCoordinates[1] as num).toDouble(),
+              ]
+              : null,
+    );
+  }
 }
 
 class RouteResponse {
@@ -46,8 +88,8 @@ class RouteResponse {
     if (geometry['type'] != 'LineString') {
       throw const FormatException('Expected LineString');
     }
-    final points = (geometry['coordinates'] as List)
-        .map((pair) {
+    final points =
+        (geometry['coordinates'] as List).map((pair) {
           final lng = (pair[0] as num).toDouble();
           final lat = (pair[1] as num).toDouble();
           if (!lat.isFinite ||
@@ -57,8 +99,7 @@ class RouteResponse {
             throw const FormatException('Invalid route coordinates');
           }
           return LatLng(lat, lng); // GeoJSON is longitude first.
-        })
-        .toList(growable: false);
+        }).toList(growable: false);
     if (points.length < 2) throw const FormatException('Route is empty');
     final assessment = json['assessment'] as Map<String, dynamic>;
     final level = assessment['level'] as String;
@@ -82,9 +123,10 @@ class RouteResponse {
       reasons: List<String>.from(assessment['reasons'] as List),
       limitations: List<String>.from(assessment['limitations'] as List),
       weatherUsed: assessment['weather_used'] as bool,
-      hazards: (json['hazards'] as List)
-          .map((h) => HazardSummary.fromJson(h as Map<String, dynamic>))
-          .toList(),
+      hazards:
+          (json['hazards'] as List)
+              .map((h) => HazardSummary.fromJson(h as Map<String, dynamic>))
+              .toList(),
     );
   }
 }

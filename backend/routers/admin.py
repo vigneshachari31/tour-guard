@@ -264,6 +264,75 @@ def incident_dict(db, incident):
     return result
 
 
+def batch_incident_dicts(db, incidents_list):
+    if not incidents_list:
+        return []
+    tourist_ids = {i.tourist_id for i in incidents_list if i.tourist_id}
+    sos_ids = {i.id for i in incidents_list}
+
+    users = {}
+    if tourist_ids:
+        for u in db.scalars(select(User).where(User.tourist_id.in_(tourist_ids))):
+            users[u.tourist_id] = u
+
+    profiles = {}
+    user_ids = {u.id for u in users.values()}
+    if user_ids:
+        for p in db.scalars(select(UserProfile).where(UserProfile.user_id.in_(user_ids))):
+            profiles[p.user_id] = p
+
+    assignments = {}
+    if sos_ids:
+        for a in db.scalars(
+            select(RescueAssignment).where(
+                RescueAssignment.sos_event_id.in_(sos_ids),
+                RescueAssignment.status == "assigned",
+            )
+        ):
+            assignments[a.sos_event_id] = a.responder_id
+
+    trips = {}
+    if tourist_ids:
+        for t in db.scalars(
+            select(Trip)
+            .where(Trip.tourist_id.in_(tourist_ids))
+            .order_by(Trip.id.desc())
+        ):
+            if t.tourist_id not in trips:
+                trips[t.tourist_id] = t
+
+    results = []
+    for incident in incidents_list:
+        res = row(incident, "id tourist_id latitude longitude created_at")
+        res["status"] = incident.workflow_status
+        user = users.get(incident.tourist_id)
+        profile = profiles.get(user.id) if user else None
+        res["tourist"] = {
+            "full_name": (profile.full_name if profile else None)
+            or (user.full_name if user else None),
+            "email": user.email if user else None,
+            "phone": (profile.phone_number if profile else None)
+            or (user.emergency_contact_phone if user else None),
+        }
+        trip = trips.get(incident.tourist_id)
+        res["last_location"] = (
+            {
+                "latitude": trip.last_latitude,
+                "longitude": trip.last_longitude,
+                "at": trip.last_location_updated_at,
+            }
+            if trip and trip.last_location_updated_at
+            else {
+                "latitude": incident.latitude,
+                "longitude": incident.longitude,
+                "at": incident.created_at,
+            }
+        )
+        res["responder_id"] = assignments.get(incident.id)
+        results.append(res)
+    return results
+
+
 @router.get("/incidents")
 def incidents(
     admin: Admin,
@@ -275,7 +344,14 @@ def incidents(
     stmt = select(SOSEvent).order_by(SOSEvent.id.desc())
     if status:
         stmt = stmt.where(SOSEvent.workflow_status == status)
-    return page(db, stmt, limit, offset, lambda obj: incident_dict(db, obj))
+    total = db.scalar(select(func.count()).select_from(stmt.order_by(None).subquery()))
+    page_items = list(db.scalars(stmt.limit(limit).offset(offset)))
+    return {
+        "items": batch_incident_dicts(db, page_items),
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @router.get("/incidents/{identity}")
