@@ -589,7 +589,7 @@ class ApiService {
     } on http.ClientException {
       throw ApiException(
         path == '/sos/trigger'
-            ? 'SOS connection failed. Delivery is unconfirmed; it may have been recorded.'
+            ? 'SOS connection failed. Delivery is unconfirmed; it may have been recordedd.'
             : 'Cannot reach the backend. Check its address, your connection, and browser CORS settings.',
       );
     }
