@@ -15,7 +15,7 @@ const empty = {
   valid_until: "",
 };
 export default function HazardsPage() {
-  const data = useResource<Hazards>("/hazards?include_inactive=true");
+  const data = useResource<Hazards>("/hazards?include_inactive=true", 15000);
   const [form, setForm] = useState(empty);
   const [editing, setEditing] = useState<number>();
   const [points, setPoints] = useState<Point[]>([]);
@@ -23,6 +23,14 @@ export default function HazardsPage() {
   const [geometry, setGeometry] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState<number>();
+  const [confirmedDeleted, setConfirmedDeleted] = useState<number[]>([]);
+  const [deleteError, setDeleteError] = useState("");
+  const [deleteMessage, setDeleteMessage] = useState("");
+  const visibleHazards = data.data && {
+    ...data.data,
+    features: data.data.features.filter((f) => !confirmedDeleted.includes(f.properties.id)),
+  };
   function draw(p: Point[]) {
     setPoints(p);
     if (p.length >= 3)
@@ -70,21 +78,6 @@ export default function HazardsPage() {
       setBusy(false);
     }
   }
-  async function toggle(h: HazardProperties) {
-    setBusy(true);
-    setError("");
-    try {
-      await api(`/hazards/${h.id}`, {
-        method: "PATCH",
-        body: { is_active: !h.is_active },
-      });
-      data.refresh();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
   function edit(h: HazardProperties) {
     const feature = data.data?.features.find((f) => f.properties.id === h.id);
     if (!feature) return;
@@ -106,6 +99,27 @@ export default function HazardsPage() {
     setDrawing(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
+  async function remove(h: HazardProperties) {
+    if (busy) return;
+    if (!window.confirm(`Permanently delete "${h.name}"? It will be removed from tourist maps and alerts on their next refresh. This cannot be undone.`)) return;
+    setBusy(true);
+    setDeleting(h.id);
+    setDeleteError("");
+    setDeleteMessage("");
+    try {
+      await api(`/hazards/${h.id}`, { method: "DELETE", signal: AbortSignal.timeout(20000) });
+      // Only remove after server confirmation; stale in-flight polls must not restore it.
+      setConfirmedDeleted((ids) => [...ids, h.id]);
+      setDeleteMessage(`Deleted "${h.name}". Tourist maps and alerts update on their next refresh.`);
+      if (editing === h.id) reset();
+      data.refresh();
+    } catch (e) {
+      setDeleteError(`Could not confirm deletion of "${h.name}". ${(e as Error).message} Check that the backend is running, then refresh and retry.`);
+    } finally {
+      setDeleting(undefined);
+      setBusy(false);
+    }
+  }
   return (
     <>
       <Heading eyebrow="GEOGRAPHIC RISK DATA" title="Hazard zone manager" />
@@ -124,7 +138,7 @@ export default function HazardsPage() {
         <span>Click to add vertices; drag numbered handles to edit.</span>
       </div>
       <RescueMap
-        hazards={data.data}
+        hazards={visibleHazards}
         draw={drawing ? points : undefined}
         onDraw={drawing ? draw : undefined}
       />
@@ -219,9 +233,11 @@ export default function HazardsPage() {
         </div>
       </form>
       <section className="panel">
+        <Notice error={deleteError} />
+        {deleteMessage && <p role="status">{deleteMessage}</p>}
         <Table
           loading={data.loading && !data.data}
-          rows={data.data?.features.map((f) => f.properties) ?? []}
+          rows={visibleHazards?.features.map((f) => f.properties) ?? []}
           columns={[
             {
               title: "Zone",
@@ -258,8 +274,8 @@ export default function HazardsPage() {
               render: (h) => (
                 <div className="actions">
                   <button onClick={() => edit(h)}>Edit</button>
-                  <button disabled={busy} onClick={() => toggle(h)}>
-                    {h.is_active ? "Deactivate" : "Activate"}
+                  <button disabled={busy} onClick={() => remove(h)} style={{ color: "#b91c1c" }}>
+                    {deleting === h.id ? "Deleting..." : "Delete"}
                   </button>
                 </div>
               ),

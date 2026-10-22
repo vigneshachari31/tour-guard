@@ -5,6 +5,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../services/api_service.dart';
+import '../services/hazard_catalog.dart';
 import '../services/current_location.dart';
 import '../models/route_response.dart';
 import '../state/active_trip_state.dart';
@@ -140,12 +141,14 @@ class _MapScreenState extends State<MapScreen> {
     }
 
     if (widget.api == null) {
+      HazardCatalog.instance.addListener(_catalogChanged);
       _loadActiveHazards();
     }
   }
 
   @override
   void dispose() {
+    HazardCatalog.instance.removeListener(_catalogChanged);
     _trips.removeListener(_onTripCleared);
     _debounceTimer?.cancel();
     _mapController.dispose();
@@ -155,7 +158,17 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _onTripCleared() {
-    if (!mounted || _trips.trip != null) return;
+    if (!mounted) return;
+    if (_trips.trip != null) {
+      if (_routeRisk != null &&
+          _trips.trip!.route.tripId == _routeRisk!.tripId) {
+        setState(() {
+          _routeRisk = _trips.trip!.route;
+          _nearbyHazards = _routeRisk!.hazards;
+        });
+      }
+      return;
+    }
     _gpsRequestId++;
     _searchRequestId++;
     _debounceTimer?.cancel();
@@ -175,14 +188,20 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _loadActiveHazards() async {
-    try {
-      final hazards = await ApiService.instance.getActiveHazardZones();
-      if (mounted) {
-        setState(() {
-          _activeHazards = hazards;
-        });
-      }
-    } catch (_) {}
+    await HazardCatalog.instance.refresh();
+    _catalogChanged();
+  }
+
+  void _catalogChanged() {
+    final catalog = HazardCatalog.instance;
+    if (!mounted || !catalog.hasLoaded) return;
+    _trips.reconcileHazards(catalog.activeIds);
+    setState(() {
+      _activeHazards = catalog.items;
+      _nearbyHazards = _nearbyHazards
+          .where((h) => catalog.activeIds.contains(h.id))
+          .toList();
+    });
   }
 
   Color _hazardFillColor(int severity) {
@@ -225,8 +244,9 @@ class _MapScreenState extends State<MapScreen> {
             ),
           ],
         ),
-        backgroundColor:
-            severity >= 4 ? const Color(0xFFDC2626) : const Color(0xFFEA580C),
+        backgroundColor: severity >= 4
+            ? const Color(0xFFDC2626)
+            : const Color(0xFFEA580C),
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 3),
       ),
@@ -237,31 +257,40 @@ class _MapScreenState extends State<MapScreen> {
     final list = <_MapHazardItem>[];
     final seen = <int>{};
     for (final h in _nearbyHazards) {
+      if (widget.api == null &&
+          HazardCatalog.instance.hasLoaded &&
+          !HazardCatalog.instance.activeIds.contains(h.id)) {
+        continue;
+      }
       if (seen.add(h.id)) {
-        list.add(_MapHazardItem(
-          id: h.id,
-          name: h.name,
-          hazardType: h.hazardType,
-          severity: h.severity,
-          isPolygon: h.isPolygon,
-          isPoint: h.isPoint,
-          polygonCoordinates: h.polygonCoordinates,
-          pointCoordinates: h.pointCoordinates,
-        ));
+        list.add(
+          _MapHazardItem(
+            id: h.id,
+            name: h.name,
+            hazardType: h.hazardType,
+            severity: h.severity,
+            isPolygon: h.isPolygon,
+            isPoint: h.isPoint,
+            polygonCoordinates: h.polygonCoordinates,
+            pointCoordinates: h.pointCoordinates,
+          ),
+        );
       }
     }
     for (final h in _activeHazards) {
       if (seen.add(h.id)) {
-        list.add(_MapHazardItem(
-          id: h.id,
-          name: h.name,
-          hazardType: h.hazardType,
-          severity: h.severity,
-          isPolygon: h.isPolygon,
-          isPoint: h.isPoint,
-          polygonCoordinates: h.polygonCoordinates,
-          pointCoordinates: h.pointCoordinates,
-        ));
+        list.add(
+          _MapHazardItem(
+            id: h.id,
+            name: h.name,
+            hazardType: h.hazardType,
+            severity: h.severity,
+            isPolygon: h.isPolygon,
+            isPoint: h.isPoint,
+            polygonCoordinates: h.polygonCoordinates,
+            pointCoordinates: h.pointCoordinates,
+          ),
+        );
       }
     }
     return list;
@@ -305,7 +334,8 @@ class _MapScreenState extends State<MapScreen> {
             child: GestureDetector(
               onTap: () => _showHazardInfo(h.name, h.hazardType, h.severity),
               child: Tooltip(
-                message: '${h.name} (${h.hazardType}, Severity ${h.severity}/5)',
+                message:
+                    '${h.name} (${h.hazardType}, Severity ${h.severity}/5)',
                 child: Container(
                   decoration: BoxDecoration(
                     color: h.severity >= 4
@@ -349,7 +379,8 @@ class _MapScreenState extends State<MapScreen> {
             child: GestureDetector(
               onTap: () => _showHazardInfo(h.name, h.hazardType, h.severity),
               child: Tooltip(
-                message: '${h.name} (${h.hazardType}, Severity ${h.severity}/5)',
+                message:
+                    '${h.name} (${h.hazardType}, Severity ${h.severity}/5)',
                 child: Container(
                   decoration: BoxDecoration(
                     color: h.severity >= 4
@@ -437,7 +468,7 @@ class _MapScreenState extends State<MapScreen> {
     setState(() {
       _destinationLocation = tappedPoint;
       _destinationName = 'Selected Pin';
-      _destinationController.text = '📍 Dropped Pin';
+      _destinationController.text = 'Dropped pin';
       _destinationSuggestions = [];
     });
 
@@ -653,7 +684,8 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   // Display and assess the same route returned by FastAPI.
-  Future<void> _calculateRoute() async {
+  Future<void> _calculateRoute({bool startTrip = false}) async {
+    if (_isCalculatingRoute) return;
     setState(_invalidateRoute);
     final start = _sourceLocation;
     final end = _destinationLocation;
@@ -667,6 +699,7 @@ class _MapScreenState extends State<MapScreen> {
     });
     try {
       final result = await (widget.api ?? ApiService.instance).analyzeRoute(
+        startTrip: startTrip,
         originLat: start.latitude,
         originLng: start.longitude,
         destLat: end.latitude,
@@ -693,15 +726,16 @@ class _MapScreenState extends State<MapScreen> {
         _routeRisk = result;
         _nearbyHazards = result.hazards;
       });
-      _trips.start(
-        ActiveTrip(
-          originName: _sourceName,
-          destinationName: _destinationName ?? _destinationController.text,
-          origin: start,
-          destination: end,
-          route: result,
-        ),
-      );
+      if (startTrip)
+        _trips.start(
+          ActiveTrip(
+            originName: _sourceName,
+            destinationName: _destinationName ?? _destinationController.text,
+            origin: start,
+            destination: end,
+            route: result,
+          ),
+        );
       _fitRouteBounds();
       widget.onAnalyzed?.call(result);
       // TripHazardMonitor publishes fresh device GPS and displays geofence warnings.
@@ -890,9 +924,7 @@ class _MapScreenState extends State<MapScreen> {
 
               // Hazard Polygons (Shaded Risk Zones)
               if (_showHazardOverlay)
-                PolygonLayer(
-                  polygons: _buildHazardPolygons(),
-                ),
+                PolygonLayer(polygons: _buildHazardPolygons()),
 
               // Route Polyline (Safe Path)
               if (_routePoints.isNotEmpty)
@@ -960,29 +992,32 @@ class _MapScreenState extends State<MapScreen> {
                       ),
                     ),
 
-                  // DESTINATION MARKER (Red Pin)
+                  // Google Maps style destination marker.
                   if (_destinationLocation != null)
                     Marker(
                       point: _destinationLocation!,
-                      width: 52,
-                      height: 52,
-                      child: const Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Icon(
-                            Icons.location_on_rounded,
-                            color: Color(0xFFDC2626),
-                            size: 46,
-                          ),
-                          Positioned(
-                            top: 10,
-                            child: Icon(
-                              Icons.flag_rounded,
-                              color: Colors.white,
-                              size: 16,
+                      width: 42,
+                      height: 50,
+                      alignment: Alignment.topCenter,
+                      child: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Color(0x33000000),
+                              blurRadius: 8,
+                              offset: Offset(0, 2),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.place_rounded,
+                          color: Color(0xFF4285F4),
+                          size: 30,
+                        ),
                       ),
                     ),
                 ],
@@ -1005,172 +1040,139 @@ class _MapScreenState extends State<MapScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Column(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(22),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x1F0E4E91),
-                          blurRadius: 20,
-                          offset: Offset(0, 6),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        // Header: Back Button, Title & Activity Spinner
-                        Row(
-                          children: [
-                            IconButton(
-                              icon: const Icon(
-                                Icons.arrow_back_rounded,
-                                color: Color(0xFF1A2D4F),
-                              ),
-                              onPressed: () => Navigator.pop(context),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
-                            const SizedBox(width: 12),
-                            const Text(
-                              'Plan Safe Route',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                                color: Color(0xFF1A2D4F),
-                              ),
-                            ),
-                            const Spacer(),
-                            if (_isLoadingGps ||
-                                _isSearching ||
-                                _isCalculatingRoute)
-                              const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Color(0xFF087CF0),
+                  Material(
+                    color: Colors.white,
+                    elevation: 4,
+                    shadowColor: const Color(0x26000000),
+                    borderRadius: BorderRadius.circular(18),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Row(
+                        children: [
+                          IconButton(
+                            tooltip: 'Back',
+                            onPressed: () => Navigator.pop(context),
+                            icon: const Icon(Icons.arrow_back_rounded),
+                          ),
+                          Expanded(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextField(
+                                        controller: _sourceController,
+                                        onChanged: _onSourceTextChanged,
+                                        onSubmitted: _onSourceTextChanged,
+                                        textInputAction: TextInputAction.search,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          color: Color(0xFF202124),
+                                        ),
+                                        decoration: InputDecoration(
+                                          hintText: 'Current location',
+                                          filled: true,
+                                          fillColor: const Color(0xFFF1F3F4),
+                                          prefixIcon: const Icon(
+                                            Icons.trip_origin_rounded,
+                                            size: 18,
+                                            color: Color(0xFF4285F4),
+                                          ),
+                                          suffixIcon: IconButton(
+                                            tooltip: 'Use current location',
+                                            onPressed: _resetSourceToLiveGps,
+                                            icon: const Icon(
+                                              Icons.my_location_rounded,
+                                              size: 18,
+                                            ),
+                                          ),
+                                          isDense: true,
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                horizontal: 12,
+                                                vertical: 12,
+                                              ),
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                            borderSide: BorderSide.none,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-
-                        // Source (FROM) Input Row
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.trip_origin_rounded,
-                              color: Color(0xFF087CF0),
-                              size: 18,
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: TextField(
-                                controller: _sourceController,
-                                onChanged: _onSourceTextChanged,
-                                onSubmitted: _onSourceTextChanged,
-                                decoration: const InputDecoration(
-                                  hintText:
-                                      'Start from (Live Location or City)...',
-                                  hintStyle: TextStyle(
-                                    color: Color(0xFF8A99AF),
-                                    fontSize: 13,
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextField(
+                                        controller: _destinationController,
+                                        onChanged: _onDestinationTextChanged,
+                                        onSubmitted: _searchAndSetDestination,
+                                        textInputAction: TextInputAction.search,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          color: Color(0xFF202124),
+                                        ),
+                                        decoration: InputDecoration(
+                                          hintText: 'Search destination',
+                                          filled: true,
+                                          fillColor: const Color(0xFFF1F3F4),
+                                          prefixIcon: const Icon(
+                                            Icons.search_rounded,
+                                            size: 18,
+                                            color: Color(0xFF4285F4),
+                                          ),
+                                          suffixIcon: IconButton(
+                                            tooltip: 'Search destination',
+                                            onPressed: () =>
+                                                _searchAndSetDestination(
+                                                  _destinationController.text,
+                                                ),
+                                            icon: const Icon(
+                                              Icons.arrow_forward_rounded,
+                                              size: 18,
+                                            ),
+                                          ),
+                                          isDense: true,
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                horizontal: 12,
+                                                vertical: 12,
+                                              ),
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                            borderSide: BorderSide.none,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (_isLoadingGps ||
+                                    _isSearching ||
+                                    _isCalculatingRoute)
+                                  const Padding(
+                                    padding: EdgeInsets.only(top: 6),
+                                    child: LinearProgressIndicator(
+                                      minHeight: 2,
+                                    ),
                                   ),
-                                  border: InputBorder.none,
-                                  isDense: true,
-                                  contentPadding: EdgeInsets.zero,
-                                ),
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF1A2D4F),
-                                ),
-                              ),
+                              ],
                             ),
-                            IconButton(
-                              icon: const Icon(
-                                Icons.my_location_rounded,
-                                color: Color(0xFF087CF0),
-                                size: 18,
-                              ),
-                              tooltip: 'Use Current Location',
-                              onPressed: _resetSourceToLiveGps,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
-                          ],
-                        ),
-
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 6),
-                          child: Divider(height: 1, color: Color(0xFFF1F5F9)),
-                        ),
-
-                        // Destination (TO) Input Row
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.location_on_rounded,
-                              color: Color(0xFFDC2626),
-                              size: 20,
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: TextField(
-                                controller: _destinationController,
-                                onChanged: _onDestinationTextChanged,
-                                onSubmitted: (value) {
-                                  _searchAndSetDestination(value);
-                                },
-                                decoration: const InputDecoration(
-                                  hintText: 'Enter destination',
-                                  hintStyle: TextStyle(
-                                    color: Color(0xFF8A99AF),
-                                    fontSize: 13,
-                                  ),
-                                  border: InputBorder.none,
-                                  isDense: true,
-                                  contentPadding: EdgeInsets.zero,
-                                ),
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF1A2D4F),
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(
-                                Icons.search_rounded,
-                                color: Color(0xFF087CF0),
-                                size: 20,
-                              ),
-                              tooltip: 'Search Destination',
-                              onPressed: () {
-                                _searchAndSetDestination(
-                                  _destinationController.text,
-                                );
-                              },
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
-                            const SizedBox(width: 8),
-                            IconButton(
-                              icon: const Icon(
-                                Icons.swap_vert_rounded,
-                                color: Color(0xFF8A99AF),
-                                size: 22,
-                              ),
-                              tooltip: 'Swap Source and Destination',
-                              onPressed: _swapSourceAndDestination,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
-                          ],
-                        ),
-                      ],
+                          ),
+                          IconButton(
+                            tooltip: 'Swap origin and destination',
+                            onPressed: _swapSourceAndDestination,
+                            icon: const Icon(Icons.swap_vert_rounded),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
 
@@ -1293,7 +1295,9 @@ class _MapScreenState extends State<MapScreen> {
                       : const Color(0xFF1A2D4F),
                   onPressed: () {
                     setState(() => _showHazardOverlay = !_showHazardOverlay);
-                    if (_showHazardOverlay && _activeHazards.isEmpty && widget.api == null) {
+                    if (_showHazardOverlay &&
+                        _activeHazards.isEmpty &&
+                        widget.api == null) {
                       _loadActiveHazards();
                     }
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -1360,17 +1364,7 @@ class _MapScreenState extends State<MapScreen> {
                     showHazards: _showHazardOverlay,
                     hazardError: _riskError,
                     isLoadingHazards: _isLoadingHazards,
-                    onStartTrip: () {
-                      _fitRouteBounds();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'Route overview: $_sourceName ➔ ${_destinationName ?? "Destination"}',
-                          ),
-                          backgroundColor: const Color(0xFF1EAA55),
-                        ),
-                      );
-                    },
+                    onStartTrip: () => _calculateRoute(startTrip: true),
                   ),
                 ),
               ),
@@ -1635,7 +1629,7 @@ class _RouteRiskSummaryCard extends StatelessWidget {
               onPressed: onStartTrip,
               icon: const Icon(Icons.navigation_rounded, size: 20),
               label: const Text(
-                'VIEW FULL ROUTE',
+                'START TRIP',
                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
               ),
               style: ElevatedButton.styleFrom(

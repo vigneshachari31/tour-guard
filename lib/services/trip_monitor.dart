@@ -10,6 +10,7 @@ import 'current_location.dart';
 /// Foreground monitoring only. Never uploads planned route coordinates as GPS.
 class TripMonitor extends ChangeNotifier {
   final ApiService api;
+  void Function(LatLng)? onPosition;
   final Future<LatLng> Function() locate;
   final Duration interval;
   Timer? _timer;
@@ -20,6 +21,12 @@ class TripMonitor extends ChangeNotifier {
   String? error;
   bool get isChecking => _busy;
   DateTime? lastCheckedAt;
+  Set<int>? _activeHazardIds;
+  void reconcileHazards(Set<int> activeIds) {
+    _activeHazardIds = activeIds;
+    hazards = hazards.where((h) => activeIds.contains(h.id)).toList();
+    if (!_disposed) notifyListeners();
+  }
 
   TripMonitor({
     ApiService? api,
@@ -69,13 +76,18 @@ class TripMonitor extends ChangeNotifier {
       final position = await locate();
       if (_disposed || generation != _generation) return;
       locating = false;
+      onPosition?.call(position);
       final update = await api.recordTripLocation(
         id,
         position.latitude,
         position.longitude,
       );
       if (_disposed || generation != _generation) return;
-      hazards = update.currentHazards;
+      hazards = update.currentHazards
+          .where(
+            (h) => _activeHazardIds == null || _activeHazardIds!.contains(h.id),
+          )
+          .toList();
       error = null;
       lastCheckedAt = DateTime.now();
     } catch (failure) {

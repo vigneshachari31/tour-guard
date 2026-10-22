@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from backend.auth import create_access_token
 from backend.database import get_db, get_engine
 from backend.main import create_app
-from backend.models import HazardZone, LocationHistory, Trip, User
+from backend.models import AuditLog, HazardZone, LocationHistory, Trip, User
 from backend.tests.check_geofence_postgis import POLYGON
 
 
@@ -22,12 +22,14 @@ def main():
         transaction = connection.begin()
         try:
             # LIKE copies structure, not records. Local names shadow public tables.
-            for table in ("users", "trips", "hazard_zones", "trip_location_updates"):
+            for table in ("users", "trips", "hazard_zones", "trip_location_updates", "audit_logs"):
                 connection.execute(text(f"CREATE TEMP TABLE {table} (LIKE public.{table} INCLUDING DEFAULTS INCLUDING CONSTRAINTS) ON COMMIT DROP"))
             connection.execute(text("CREATE TEMP SEQUENCE geofence_test_location_id"))
             connection.execute(text("ALTER TABLE pg_temp.trip_location_updates ALTER COLUMN id SET DEFAULT nextval('pg_temp.geofence_test_location_id')"))
+            connection.execute(text("CREATE TEMP SEQUENCE geofence_test_audit_id"))
+            connection.execute(text("ALTER TABLE pg_temp.audit_logs ALTER COLUMN id SET DEFAULT nextval('pg_temp.geofence_test_audit_id')"))
             # Abort before any writes unless all unqualified ORM names resolve locally.
-            for table in ("users", "trips", "hazard_zones", "trip_location_updates"):
+            for table in ("users", "trips", "hazard_zones", "trip_location_updates", "audit_logs"):
                 assert connection.scalar(text(f"SELECT '{table}'::regclass = 'pg_temp.{table}'::regclass"))
             with Session(connection, join_transaction_mode="create_savepoint") as db:
                 db.add(User(id=1, email="geofence-test@example.com", hashed_password="unused",
@@ -68,6 +70,18 @@ def main():
                     assert db.scalar(select(func.count(LocationHistory.id))) == 6
                     assert db.get(Trip, 1).last_latitude == 19.0440
                     print("PASS: authenticated GPS persistence, polygon entry, repeat, exit/re-entry, inactive hazard and point proximity")
+                    assert client.delete('/api/v1/admin/hazards/9').status_code == 401
+                    assert client.delete('/api/v1/admin/hazards/9', headers=headers).status_code == 403
+                    db.get(User, 1).role = 'admin'
+                    db.commit()
+                    assert client.delete('/api/v1/admin/hazards/9', headers=headers).status_code == 204
+                    assert client.delete('/api/v1/admin/hazards/9', headers=headers).status_code == 404
+                    assert client.get('/api/v1/hazards/active').json()['features'] == []
+                    assert client.get('/api/v1/admin/hazards?include_inactive=true', headers=headers).json()['features'] == []
+                    assert send()['current_hazards'] == []
+                    assert all('"hazard_id": 9' not in (r.hazard_alerts or '') for r in db.scalars(select(LocationHistory)))
+                    assert db.scalar(select(AuditLog.action)) == 'HAZARD_DELETE'
+                    print('PASS: admin-only deletion, public/admin removal, warning cleanup, audit and missing-ID handling')
         finally:
             transaction.rollback()
     engine.dispose()

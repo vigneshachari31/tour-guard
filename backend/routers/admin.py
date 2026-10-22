@@ -641,6 +641,25 @@ def patch_hazard(identity: int, body: HazardPatch, admin: Admin, db: DB):
     return {"id": identity}
 
 
+@router.delete("/hazards/{identity}", status_code=204)
+def delete_hazard(identity: int, admin: Admin, db: DB):
+    hazard = required(db, HazardZone, identity, True)
+    # Remove this hazard from saved warning snapshots as well as the live table.
+    for record in db.scalars(select(LocationHistory).where(or_(
+        LocationHistory.current_hazards.is_not(None),
+        LocationHistory.hazard_alerts.is_not(None),
+    )).order_by(LocationHistory.id).with_for_update()):
+        for field in ("current_hazards", "hazard_alerts"):
+            entries = json.loads(getattr(record, field) or "[]")
+            remaining = [entry for entry in entries if entry.get("hazard_id") != identity]
+            if len(remaining) != len(entries):
+                setattr(record, field, json.dumps(remaining))
+    audit(db, admin, "HAZARD_DELETE", "hazard", identity)
+    db.delete(hazard)
+    commit(db)
+    return Response(status_code=204)
+
+
 @router.get("/trips")
 def trips(
     admin: Admin,

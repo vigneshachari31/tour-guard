@@ -8,7 +8,7 @@ from typing import Annotated, Literal
 from uuid import uuid4
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import func, or_, select, text
@@ -250,6 +250,9 @@ def create_app() -> FastAPI:
             ),
         )
 
+        if not body.start_trip:
+            return result
+
         # Serialize trip replacement for this tourist; keep assessment and trip atomic.
         db.execute(select(User.id).where(User.id == user.id).with_for_update())
         for previous in db.scalars(
@@ -335,9 +338,11 @@ def create_app() -> FastAPI:
         tags=["Hazards"],
     )
     def list_active_hazards(
+        response: Response,
         db: DB,
         user: Annotated[User | None, Depends(get_optional_user)] = None,
     ):
+        response.headers["Cache-Control"] = "no-store"
         try:
             stmt = (
                 select(HazardZone, func.ST_AsGeoJSON(HazardZone.geometry))
@@ -369,8 +374,10 @@ def create_app() -> FastAPI:
                 "type": "FeatureCollection",
                 "features": features,
             }
-        except Exception:
-            return {"type": "FeatureCollection", "features": []}
+        except SQLAlchemyError:
+            raise
+        except Exception as exc:
+            raise HTTPException(503, "Hazard data unavailable; retry later") from exc
 
     @app.post(
         "/api/v1/hazards/report",

@@ -7,7 +7,8 @@ class RouteRiskCard extends StatelessWidget {
   final RouteResponse? route;
   final ActiveTrip? trip;
   final VoidCallback? onEndTrip;
-  const RouteRiskCard({super.key, this.route, this.trip, this.onEndTrip});
+  final VoidCallback? onOpenMap;
+  const RouteRiskCard({super.key, this.route, this.trip, this.onEndTrip, this.onOpenMap});
 
   @override
   Widget build(BuildContext context) {
@@ -25,6 +26,10 @@ class RouteRiskCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (trip != null) ...[
+              Text(ActiveTripState.instance.arrived ? 'You’ve arrived!' : 'Trip in progress', style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+              if (ActiveTripState.instance.distanceToDestination != null)
+                Text('${(ActiveTripState.instance.distanceToDestination! / 1000).toStringAsFixed(2)} km to destination (straight-line)'),
+              const Text('Original route estimate below', style: TextStyle(fontSize: 12, color: Colors.blueGrey)),
               Text(
                 '${trip!.originName} ➔ ${trip!.destinationName}',
                 style: const TextStyle(
@@ -73,7 +78,7 @@ class RouteRiskCard extends StatelessWidget {
                 tilePadding: EdgeInsets.zero,
                 childrenPadding: const EdgeInsets.only(bottom: 12),
                 title: const Text(
-                  'Assessment details',
+                  'Safety details',
                   style: TextStyle(fontSize: 14),
                 ),
                 children: [
@@ -95,11 +100,22 @@ class RouteRiskCard extends StatelessWidget {
                 ],
               ),
               if (trip != null && onEndTrip != null) ...[
+                TextButton.icon(onPressed: onOpenMap, icon: const Icon(Icons.map_outlined), label: const Text('OPEN MAP')),
                 const SizedBox(height: 8),
                 TextButton.icon(
-                  onPressed: onEndTrip,
+                  onPressed: () async {
+                    final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+                      title: const Text('Finish this trip?'),
+                      content: const Text('Trip monitoring will stop.'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+                        FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Finish trip')),
+                      ],
+                    ));
+                    if (confirmed == true) onEndTrip?.call();
+                  },
                   icon: const Icon(Icons.stop_circle_outlined),
-                  label: const Text('END TRIP'),
+                  label: Text(ActiveTripState.instance.arrived ? 'FINISH TRIP' : 'END TRIP'),
                 ),
               ],
             ],

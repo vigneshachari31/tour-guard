@@ -743,6 +743,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     RouteRiskCard(
                       trip: _trips.trip,
                       onEndTrip: _endingTrip ? null : _endTrip,
+                      onOpenMap: () => _navigateToMap(),
                     ),
                     const SizedBox(height: 18),
 

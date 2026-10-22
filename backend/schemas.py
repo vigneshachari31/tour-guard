@@ -58,6 +58,7 @@ class WeatherObservation(InputModel):
 
 
 class RouteRequest(InputModel):
+    start_trip: bool = False
     origin_lat: Latitude
     origin_lng: Longitude
     dest_lat: Latitude

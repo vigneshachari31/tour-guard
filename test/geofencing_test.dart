@@ -134,6 +134,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(find.textContaining('Live updates unavailable'), findsNothing);
+      monitor.reconcileHazards({});
+      await tester.pump();
+      expect(find.textContaining('dangerous zone'), findsNothing);
+      await monitor.poll();
+      await tester.pump();
+      expect(find.textContaining('dangerous zone'), findsNothing);
       final beforePause = count;
       monitor.setForeground(false);
       await monitor.poll();

@@ -193,6 +193,7 @@ class ApiService {
     const configured = String.fromEnvironment('API_BASE_URL');
     if (configured.isNotEmpty) return configured;
     return !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+        // ? 'http://192.168.0.103:8000/api/v1'
         ? 'http://10.0.2.2:8000/api/v1'
         : 'http://127.0.0.1:8000/api/v1';
   }
@@ -296,8 +297,10 @@ class ApiService {
     WeatherObservation? weather,
     String? originName,
     String? destinationName,
+    bool startTrip = false,
   }) async {
     final json = await _post('/route/analyze', {
+      'start_trip': startTrip,
       'origin_lat': originLat,
       'origin_lng': originLng,
       'dest_lat': destLat,
@@ -392,21 +395,19 @@ class ApiService {
       );
 
   Future<List<AdminHazard>> getActiveHazardZones() async {
-    try {
-      final result = await _post(
-        '/hazards/active',
-        {},
-        authenticated: false,
-        method: 'GET',
-      );
-      final items = result['features'] ?? result['items'] ?? result;
-      if (items is! List) return const [];
-      return items
-          .map((item) => AdminHazard.fromJson(item as Map<String, dynamic>))
-          .toList();
-    } catch (_) {
-      return const [];
+    final result = await _post(
+      '/hazards/active',
+      {},
+      authenticated: false,
+      method: 'GET',
+    );
+    final items = result['features'] ?? result['items'] ?? result;
+    if (items is! List) {
+      throw const ApiException('Invalid hazard list response.');
     }
+    return items
+        .map((item) => AdminHazard.fromJson(item as Map<String, dynamic>))
+        .toList();
   }
 
   Future<List<AdminHazard>> getAdminHazards({
@@ -443,7 +444,7 @@ class ApiService {
   );
 
   Future<void> deactivateAdminHazard(int id) async {
-    await _post('/admin/hazards/$id', {}, method: 'DELETE');
+    await _post('/admin/hazards/$id', {'is_active': false}, method: 'PATCH');
   }
 
   Future<Map<String, dynamic>> reportHazard({

@@ -262,14 +262,13 @@ void main() {
           final fields = tester
               .widgetList<TextField>(find.byType(TextField))
               .toList();
-          expect(fields[0].controller!.text, 'Ooty Source');
-          expect(fields[1].controller!.text, 'Pykara Destination');
+          expect(fields, hasLength(1));
+          expect(fields[0].controller!.text, 'Pykara Destination');
           await tester.ensureVisible(find.text('END TRIP'));
           await tester.tap(find.text('END TRIP'));
           await tester.pumpAndSettle();
           expect(trips.trip, isNull);
           expect(fields[0].controller!.text, isEmpty);
-          expect(fields[1].controller!.text, isEmpty);
           expect(find.text('HIGH RISK'), findsNothing);
           await tester.pumpWidget(const SizedBox());
         }

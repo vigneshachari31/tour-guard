@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/trip_monitor.dart';
+import '../services/hazard_catalog.dart';
 import '../state/active_trip_state.dart';
 
 class TripHazardMonitor extends StatefulWidget {
@@ -29,15 +30,41 @@ class _TripHazardMonitorState extends State<TripHazardMonitor>
     _trips = widget.tripState ?? ActiveTripState.instance;
     WidgetsBinding.instance.addObserver(this);
     _trips.addListener(_sync);
+    _monitor.onPosition = _trips.updatePosition;
     _sync();
+    if (widget.monitor == null) {
+      HazardCatalog.instance.addListener(_hazardsChanged);
+      HazardCatalog.instance.start();
+    }
+  }
+
+  void _hazardsChanged() {
+    final catalog = HazardCatalog.instance;
+    if (!catalog.hasLoaded) return;
+    _trips.reconcileHazards(catalog.activeIds);
+    _monitor.reconcileHazards(catalog.activeIds);
   }
 
   void _sync() => _monitor.setTrip(_trips.trip?.route.tripId);
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) =>
-      _monitor.setForeground(state == AppLifecycleState.resumed);
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final foreground = state == AppLifecycleState.resumed;
+    _monitor.setForeground(foreground);
+    if (widget.monitor == null) {
+      if (foreground) {
+        HazardCatalog.instance.start();
+      } else {
+        HazardCatalog.instance.stop();
+      }
+    }
+  }
+
   @override
   void dispose() {
+    if (widget.monitor == null) {
+      HazardCatalog.instance.removeListener(_hazardsChanged);
+      HazardCatalog.instance.stop();
+    }
     _trips.removeListener(_sync);
     WidgetsBinding.instance.removeObserver(this);
     _monitor.dispose();
