@@ -427,8 +427,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 setSheetState(() => isSubmitting = true);
                                 try {
                                   final result = await ApiService.instance
-                                      .reportHazard(
-                                        name: desc,
+                                      .reportTouristHazard(
+                                        description: desc,
                                         hazardType: hazardType,
                                         severity: severity,
                                         latitude: location!.latitude,

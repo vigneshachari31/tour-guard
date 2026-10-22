@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 
 import '../models/geofence_update.dart';
@@ -191,9 +191,12 @@ class ApiService {
 
   static String get defaultBaseUrl {
     const configured = String.fromEnvironment('API_BASE_URL');
-    if (configured.isNotEmpty) return configured;
+
+    if (configured.isNotEmpty) {
+      return configured;
+    }
+
     return !kIsWeb && defaultTargetPlatform == TargetPlatform.android
-        // ? 'http://192.168.0.103:8000/api/v1'
         ? 'http://10.0.2.2:8000/api/v1'
         : 'http://127.0.0.1:8000/api/v1';
   }
@@ -447,6 +450,22 @@ class ApiService {
     await _post('/admin/hazards/$id', {'is_active': false}, method: 'PATCH');
   }
 
+  Future<Map<String, dynamic>> reportTouristHazard({
+    required double latitude,
+    required double longitude,
+    required String hazardType,
+    required int severity,
+    String? description,
+  }) async {
+    return await _post('/hazards/report', {
+      'latitude': latitude,
+      'longitude': longitude,
+      'hazard_type': hazardType,
+      'severity': severity,
+      'description': description,
+    });
+  }
+
   Future<Map<String, dynamic>> reportHazard({
     required String name,
     required String hazardType,
@@ -454,13 +473,13 @@ class ApiService {
     required double latitude,
     required double longitude,
   }) async {
-    return await _post('/hazards/report', {
-      'name': name,
-      'hazard_type': hazardType,
-      'severity': severity,
-      'latitude': latitude,
-      'longitude': longitude,
-    });
+    return await reportTouristHazard(
+      latitude: latitude,
+      longitude: longitude,
+      hazardType: hazardType,
+      severity: severity,
+      description: name,
+    );
   }
 
   Future<UserProfile> getProfile() async =>

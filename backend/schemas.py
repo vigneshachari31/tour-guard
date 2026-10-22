@@ -124,25 +124,33 @@ class SOSEventsListResponse(BaseModel):
     total: int
 
 
-class HazardReportRequest(InputModel):
-    name: str = Field(min_length=3, max_length=200)
-    hazard_type: str = Field(min_length=3, max_length=50)
-    severity: int = Field(ge=1, le=5)
+class TouristHazardReportCreate(InputModel):
     latitude: Latitude
     longitude: Longitude
+    hazard_type: str = Field(min_length=1, max_length=50)
+    severity: int = Field(ge=1, le=5)
+    description: str | None = Field(default=None, max_length=5000)
+    name: str | None = Field(default=None, max_length=200)
 
 
-class HazardReportResponse(BaseModel):
+class TouristHazardReportResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
-    name: str
+    tourist_id: str | None = None
     hazard_type: str
     severity: int
+    description: str | None = None
+    name: str | None = None
     latitude: float
     longitude: float
-    source: str | None
-    updated_at: datetime | None
-    message: str = "Hazard report recorded into spatial database."
+    status: str = "pending"
+    created_at: datetime
+    message: str = "Tourist hazard report submitted successfully and is pending review."
+
+
+# Backward compatibility aliases
+HazardReportRequest = TouristHazardReportCreate
+HazardReportResponse = TouristHazardReportResponse
 
 
 class ProfileUpdate(InputModel):

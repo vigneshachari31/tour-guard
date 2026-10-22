@@ -30,6 +30,7 @@ if __package__:
     from .routers.admin import router as admin_router
     from .routers.profile import router as profile_router
     from .routers.trips import router as trips_router
+    from .routers.hazards import router as hazards_router
     from .schemas import (
         HazardReportRequest,
         HazardReportResponse,
@@ -57,6 +58,7 @@ else:
     from routers.admin import router as admin_router
     from routers.profile import router as profile_router
     from routers.trips import router as trips_router
+    from routers.hazards import router as hazards_router
     from schemas import (
         HazardReportRequest,
         HazardReportResponse,
@@ -122,6 +124,7 @@ def create_app() -> FastAPI:
     app.include_router(profile_router)
     app.include_router(admin_router)
     app.include_router(trips_router)
+    app.include_router(hazards_router)
 
     login_attempts: dict[str, deque[float]] = {}
 
@@ -379,38 +382,6 @@ def create_app() -> FastAPI:
         except Exception as exc:
             raise HTTPException(503, "Hazard data unavailable; retry later") from exc
 
-    @app.post(
-        "/api/v1/hazards/report",
-        response_model=HazardReportResponse,
-        status_code=201,
-        tags=["Hazards"],
-    )
-    def report_hazard(
-        body: HazardReportRequest,
-        user: CurrentUser,
-        db: DB,
-    ) -> HazardReportResponse:
-        geom = func.ST_SetSRID(func.ST_MakePoint(body.longitude, body.latitude), 4326)
-        hazard = HazardZone(
-            name=body.name,
-            hazard_type=body.hazard_type,
-            severity=body.severity,
-            geometry=geom,
-            source=f"Tourist Report ({user.tourist_id})",
-        )
-        db.add(hazard)
-        db.commit()
-        db.refresh(hazard)
-        return HazardReportResponse(
-            id=hazard.id,
-            name=hazard.name,
-            hazard_type=hazard.hazard_type,
-            severity=hazard.severity,
-            latitude=body.latitude,
-            longitude=body.longitude,
-            source=hazard.source,
-            updated_at=hazard.updated_at,
-        )
 
     from pathlib import Path
 

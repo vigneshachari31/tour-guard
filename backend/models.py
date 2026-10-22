@@ -37,8 +37,6 @@ class User(Base):
     tourist_id: Mapped[str] = mapped_column(String(35), unique=True, index=True)
     full_name: Mapped[str | None] = mapped_column(String(255))
     emergency_contact_phone: Mapped[str | None] = mapped_column(String(25))
-    # Admin is assigned manually by a database administrator; users cannot self-register it.
-    role: Mapped[str] = mapped_column(String(20), default="tourist", server_default="tourist")
 
 
 class HazardZone(Base):
@@ -69,7 +67,6 @@ class HazardZone(Base):
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    is_active: Mapped[bool] = mapped_column(default=True, server_default="true")
 
 
 # The query casts geometry to geography for meter-based distances; index that expression.
@@ -79,6 +76,34 @@ Index(
     postgresql_using="gist",
 )
 
+
+
+class TouristHazardReport(Base):
+    __tablename__ = "tourist_hazard_reports"
+    __table_args__ = (
+        CheckConstraint("severity BETWEEN 1 AND 5", name="tourist_hazard_severity_range"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tourist_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.tourist_id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    hazard_type: Mapped[str] = mapped_column(String(50))
+    severity: Mapped[int] = mapped_column(Integer)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    location: Mapped[WKBElement] = mapped_column(Geometry("POINT", srid=4326))
+    status: Mapped[str] = mapped_column(
+        String(20), default="pending", server_default="pending"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+Index(
+    "idx_tourist_hazard_reports_location",
+    TouristHazardReport.location,
+    postgresql_using="gist",
+)
 
 class SOSEvent(Base):
     __tablename__ = "sos_events"
