@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
@@ -30,6 +31,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Current active tab index in the Bottom Navigation Bar
   int _currentTabIndex = 0;
   bool _endingTrip = false;
+  Timer? _sosTimer;
+  Map<String, dynamic>? _activeSos;
+  bool _sosBusy = false;
+  bool _sosOffline = false;
+  Future<void> _refreshSos() async {
+    if (_sosBusy) return;
+    _sosBusy = true;
+    try {
+      final events = await ApiService.instance.getActiveSosEvents();
+      final active = events.where((e) => ['OPEN', 'IN_PROGRESS'].contains(e['workflow_status']));
+      if (mounted) setState(() {
+        _activeSos = active.isEmpty ? null : active.first;
+        _sosOffline = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _sosOffline = true);
+    } finally { _sosBusy = false; }
+  }
   final _destinationController = TextEditingController();
   ActiveTripState get _trips => widget.tripState ?? ActiveTripState.instance;
 
@@ -38,6 +57,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.initState();
     _syncTrip();
     _trips.addListener(_tripChanged);
+    if (widget.tripState == null) {
+      _refreshSos();
+      _sosTimer = Timer.periodic(const Duration(seconds: 10), (_) => _refreshSos());
+    }
   }
 
   void _syncTrip() {
@@ -50,6 +73,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void dispose() {
+    _sosTimer?.cancel();
     _trips.removeListener(_tripChanged);
     _destinationController.dispose();
     super.dispose();
@@ -104,11 +128,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   // Navigation helper to open the Emergency SOS & Smart Rescue screen
-  void _navigateToSos() {
-    Navigator.push(
+  Future<void> _navigateToSos() async {
+    await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const SosScreen()),
     );
+    if (mounted) await _refreshSos();
   }
 
   Future<void> _handleLiveSharing() async {
@@ -737,6 +762,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     // 1. App Title & Notifications Header
                     const DashboardHeader(),
+                    if (_activeSos != null)
+                      Card(
+                        color: const Color(0xFFFFF1F0),
+                        child: ListTile(
+                          leading: const Icon(Icons.sos, color: Colors.red),
+                          title: Text('Active SOS #${_activeSos!['id']}'),
+                          subtitle: Text(_sosOffline
+                            ? 'Updates unavailable. Last received status shown.'
+                            : _activeSos!['workflow_status'] == 'IN_PROGRESS'
+                              ? 'Rescue desk has started the response.'
+                              : 'Received. Waiting for a response.'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: _navigateToSos,
+                        ),
+                      ),
                     const SizedBox(height: 16),
 
                     // 2. AI Safety Status & Live Environmental Card (Compact)

@@ -100,6 +100,9 @@ export default function IncidentDetails() {
               </label>
               <label>
                 Assign or reassign responder
+                {responders.data && !responders.data.items.some((r) => r.status === "available") && (
+                  <p>No available responders. <Link to="/responders">Register or update a responder</Link>, then return here to assign them.</p>
+                )}
                 <select
                   value={responder}
                   onChange={(e) => setResponder(e.target.value)}
@@ -131,6 +134,7 @@ export default function IncidentDetails() {
               >
                 Assign responder
               </button>
+              <p>Choose an available responder and enter an action note (at least 3 characters) to assign them.</p>
               <hr />
               <h3>Update incident status</h3>
               {transitions[incident.status].map((status) => (

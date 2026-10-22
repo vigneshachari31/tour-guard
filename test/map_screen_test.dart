@@ -183,7 +183,7 @@ void main() {
         );
         expect(find.byType(FlutterMap), findsOneWidget);
         expect(find.byType(TextField), findsNWidgets(2));
-        expect(find.byTooltip('Use Current Location'), findsOneWidget);
+        expect(find.byTooltip('Use current location'), findsOneWidget);
         expect(find.byType(PolylineLayer), findsNothing);
         await tester.enterText(find.byType(TextField).at(0), 'Ooty');
         await tester.pump(const Duration(milliseconds: 400));
@@ -196,6 +196,7 @@ void main() {
         await tester.tap(find.text('Pykara Destination'));
         await tester.pumpAndSettle();
         expect(sent, {
+          'start_trip': false,
           'origin_lat': 11.4102,
           'origin_lng': 76.695,
           'dest_lat': 11.45,
@@ -213,6 +214,9 @@ void main() {
           final layer = tester.widget<PolylineLayer>(
             find.byType(PolylineLayer),
           );
+          expect(trips.trip, isNull);
+          await tester.tap(find.text('START TRIP'));
+          await tester.pumpAndSettle();
           expect(trips.trip?.originName, 'Ooty Source');
           expect(trips.trip?.destinationName, 'Pykara Destination');
           expect(trips.trip?.riskLevel, 'HIGH RISK');
@@ -266,6 +270,8 @@ void main() {
           expect(fields[0].controller!.text, 'Pykara Destination');
           await tester.ensureVisible(find.text('END TRIP'));
           await tester.tap(find.text('END TRIP'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Finish trip'));
           await tester.pumpAndSettle();
           expect(trips.trip, isNull);
           expect(fields[0].controller!.text, isEmpty);

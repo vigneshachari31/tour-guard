@@ -373,6 +373,14 @@ class ApiService {
   }
 
   Future<List<Map<String, dynamic>>> getActiveSosEvents() async {
+    return getSosHistory();
+  }
+
+  Future<void> cancelSos(int id) async {
+    await _post('/sos/events/$id/cancel', {});
+  }
+
+  Future<List<Map<String, dynamic>>> getSosHistory() async {
     final response = await _post('/sos/events', {}, method: 'GET');
     final events = response['events'];
     if (events is List) {

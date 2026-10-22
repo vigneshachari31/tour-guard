@@ -109,6 +109,7 @@ class SOSRequest(InputModel):
 
 
 class SOSResponse(BaseModel):
+    workflow_status: str = "OPEN"
     model_config = ConfigDict(from_attributes=True)
     id: int
     tourist_id: str

@@ -31,6 +31,7 @@ if __package__:
     from .routers.profile import router as profile_router
     from .routers.trips import router as trips_router
     from .routers.hazards import router as hazards_router
+    from .routers.moderation import router as moderation_router, verified_features
     from .schemas import (
         HazardReportRequest,
         HazardReportResponse,
@@ -59,6 +60,7 @@ else:
     from routers.profile import router as profile_router
     from routers.trips import router as trips_router
     from routers.hazards import router as hazards_router
+    from routers.moderation import router as moderation_router, verified_features
     from schemas import (
         HazardReportRequest,
         HazardReportResponse,
@@ -125,6 +127,7 @@ def create_app() -> FastAPI:
     app.include_router(admin_router)
     app.include_router(trips_router)
     app.include_router(hazards_router)
+    app.include_router(moderation_router)
 
     login_attempts: dict[str, deque[float]] = {}
 
@@ -305,6 +308,14 @@ def create_app() -> FastAPI:
     def trigger_sos(body: SOSRequest, user: CurrentUser, db: DB) -> SOSEvent:
         if body.tourist_id != user.tourist_id:
             raise HTTPException(403, "You can only submit SOS for your own tourist ID")
+        db.execute(select(User.id).where(User.id == user.id).with_for_update())
+        existing = db.scalar(select(SOSEvent).where(
+            SOSEvent.tourist_id == user.tourist_id,
+            SOSEvent.workflow_status.in_(["OPEN", "IN_PROGRESS"]),
+        ).order_by(SOSEvent.created_at.desc()).limit(1))
+        if existing is not None:
+            db.commit()
+            return existing
         event = SOSEvent(
             tourist_id=user.tourist_id,
             latitude=body.latitude,
@@ -316,6 +327,31 @@ def create_app() -> FastAPI:
         db.refresh(event)
         return event
 
+    @app.post("/api/v1/sos/events/{identity}/cancel", tags=["SOS"])
+    def cancel_own_sos(identity: int, user: CurrentUser, db: DB):
+        if __package__:
+            from .routers.admin import release_assignment
+            from .models import SOSHistory
+        else:
+            from routers.admin import release_assignment
+            from models import SOSHistory
+        event = db.scalar(select(SOSEvent).where(
+            SOSEvent.id == identity, SOSEvent.tourist_id == user.tourist_id
+        ).with_for_update())
+        if event is None:
+            raise HTTPException(404, "SOS not found")
+        if event.workflow_status in ("RESOLVED", "CANCELLED"):
+            return {"id": identity, "status": event.workflow_status}
+        old = event.workflow_status
+        event.workflow_status = "CANCELLED"
+        event.status = "resolved"
+        release_assignment(db, identity, "cancelled")
+        db.add(SOSHistory(sos_event_id=identity, old_status=old,
+            new_status="CANCELLED", changed_by_id=user.id,
+            notes="Tourist cancelled the SOS after confirmation."))
+        db.commit()
+        return {"id": identity, "status": "CANCELLED"}
+
     @app.get(
         "/api/v1/sos/events",
         response_model=SOSEventsListResponse,
@@ -324,7 +360,7 @@ def create_app() -> FastAPI:
     def list_sos_events(
         user: CurrentUser,
         db: DB,
-        status: Literal["active", "resolved"] | None = "active",
+        status: Literal["active", "resolved"] | None = None,
     ) -> SOSEventsListResponse:
         stmt = select(SOSEvent).where(SOSEvent.tourist_id == user.tourist_id)
         if status:
@@ -375,7 +411,7 @@ def create_app() -> FastAPI:
                     })
             return {
                 "type": "FeatureCollection",
-                "features": features,
+                "features": features + verified_features(db),
             }
         except SQLAlchemyError:
             raise

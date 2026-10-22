@@ -34,6 +34,33 @@ class _SosScreenState extends State<SosScreen>
   late Animation<double> _pulseAnimation;
 
   Timer? _countdownTimer;
+  Timer? _statusTimer;
+  bool _checkingStatus = false;
+  int? _incidentId;
+  Future<void> _refreshStatus() async {
+    if (_checkingStatus) return;
+    _checkingStatus = true;
+    try {
+      final events = await ApiService.instance.getActiveSosEvents();
+      if (!mounted || events.isEmpty) return;
+      final event = events.first;
+      _incidentId = event['id'] as int;
+      final status = event['workflow_status'] ?? 'OPEN';
+      final active = status == 'OPEN' || status == 'IN_PROGRESS';
+      setState(() {
+        _isSosDispatched = active;
+        _sosStatusMessage = 'SOS #${event['id']}: ${switch (status) {
+          'OPEN' => 'Received. Waiting for a response.',
+          'IN_PROGRESS' => 'Response started by the rescue desk.',
+          'RESOLVED' => 'Resolved by the rescue desk.',
+          'CANCELLED' => 'Cancelled.',
+          _ => 'Status unavailable.',
+        }}';
+      });
+    } catch (_) {
+      if (mounted && _isSosDispatched) setState(() => _sosStatusMessage = 'Status updates unavailable. Retrying; your SOS may still be active.');
+    } finally { _checkingStatus = false; }
+  }
   int _countdownSeconds = 3;
   bool _isCountingDown = false;
   bool _isSosDispatched = false;
@@ -64,6 +91,8 @@ class _SosScreenState extends State<SosScreen>
     );
 
     _loadTouristProfile();
+    _refreshStatus();
+    _statusTimer = Timer.periodic(const Duration(seconds: 10), (_) => _refreshStatus());
     _fetchLiveTelemetry();
   }
 
@@ -79,6 +108,7 @@ class _SosScreenState extends State<SosScreen>
   @override
   void dispose() {
     _countdownTimer?.cancel();
+    _statusTimer?.cancel();
     _pulseController.dispose();
     super.dispose();
   }
@@ -118,6 +148,7 @@ class _SosScreenState extends State<SosScreen>
 
   // ─── 2. TRIGGER 3-SECOND COUNTDOWN ─────────────────────────────────────────
   void _startCountdown() {
+    if (_isCountingDown || _isSosDispatching || _isSosDispatched) return;
     setState(() {
       _isCountingDown = true;
       _countdownSeconds = 3;
@@ -164,6 +195,7 @@ class _SosScreenState extends State<SosScreen>
         longitude: position.longitude,
       );
       if (!mounted) return;
+      _incidentId = result.id;
       setState(() {
         _isSosDispatching = false;
         _isSosDispatched = true;
@@ -199,7 +231,25 @@ class _SosScreenState extends State<SosScreen>
   }
 
   // ─── 5. RESET RESCUE STATE ──────────────────────────────────────────────────
-  void _resetSosState() {
+  Future<void> _resetSosState() async {
+    if (_incidentId != null && _isSosDispatched) {
+      final confirm = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+        title: const Text('Cancel this SOS?'),
+        content: const Text('The rescue desk will see that you cancelled your request.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep SOS active')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Cancel SOS')),
+        ],
+      ));
+      if (confirm != true) return;
+      try {
+        await ApiService.instance.cancelSos(_incidentId!);
+      } catch (_) {
+        if (mounted) _showSosMessage('Cancellation not confirmed. Refresh status and retry.', isError: true);
+        return;
+      }
+      if (!mounted) return;
+    }
     setState(() {
       _isSosDispatched = false;
       _isSosDispatching = false;
@@ -239,6 +289,11 @@ class _SosScreenState extends State<SosScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              if (_sosStatusMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Text(_sosStatusMessage!, style: const TextStyle(color: Colors.white, fontSize: 16)),
+                ),
               // ─── Top Live Beacon Status Banner ──────────────────────────────
               Container(
                 width: double.infinity,
