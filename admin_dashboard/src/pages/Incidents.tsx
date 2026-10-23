@@ -65,6 +65,9 @@ export default function Incidents() {
                 `${i.latitude.toFixed(5)}, ${i.longitude.toFixed(5)}`,
             },
             { title: "Received", render: (i) => date(i.created_at) },
+            { title: "Waiting / elapsed", render: (i) => ["OPEN", "IN_PROGRESS"].includes(i.status)
+              ? `${Math.max(0, Math.floor((Date.now() - Date.parse(i.created_at)) / 60000))} min${i.responder_id ? "" : " · needs assignment"}`
+              : "Closed" },
             {
               title: "Responder",
               render: (i) =>

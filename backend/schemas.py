@@ -115,6 +115,9 @@ class SOSRequest(InputModel):
 
 
 class SOSResponse(BaseModel):
+    responder: dict | None = None
+    responder_stage: str = "UNASSIGNED"
+    sos_location: dict | None = None
     workflow_status: str = "OPEN"
     model_config = ConfigDict(from_attributes=True)
     id: int

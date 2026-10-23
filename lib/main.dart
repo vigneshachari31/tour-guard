@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'widgets/sos_location_monitor.dart';
 
 import 'widgets/trip_hazard_monitor.dart';
 
@@ -29,7 +30,7 @@ class TravelRiskApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Tour Guard',
       builder: (context, child) =>
-          TripHazardMonitor(child: child ?? const SizedBox.shrink()),
+          SosLocationMonitor(child: TripHazardMonitor(child: child ?? const SizedBox.shrink())),
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(

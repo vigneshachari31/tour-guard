@@ -32,6 +32,8 @@ if __package__:
     from .routers.trips import router as trips_router
     from .routers.trip_stream import router as trip_stream_router
     from .routers.hazards import router as hazards_router
+    from .routers.radar import router as radar_router
+    from .routers.sos_tracking import router as sos_tracking_router, tracking_details
     from .routers.moderation import router as moderation_router, verified_features
     from .schemas import (
         HazardReportRequest,
@@ -62,6 +64,8 @@ else:
     from routers.trips import router as trips_router
     from routers.trip_stream import router as trip_stream_router
     from routers.hazards import router as hazards_router
+    from routers.radar import router as radar_router
+    from routers.sos_tracking import router as sos_tracking_router, tracking_details
     from routers.moderation import router as moderation_router, verified_features
     from schemas import (
         HazardReportRequest,
@@ -130,6 +134,8 @@ def create_app() -> FastAPI:
     app.include_router(trips_router)
     app.include_router(trip_stream_router)
     app.include_router(hazards_router)
+    app.include_router(radar_router)
+    app.include_router(sos_tracking_router)
     app.include_router(moderation_router)
 
     login_attempts: dict[str, deque[float]] = {}
@@ -373,10 +379,10 @@ def create_app() -> FastAPI:
         stmt = select(SOSEvent).where(SOSEvent.tourist_id == user.tourist_id)
         if status:
             stmt = stmt.where(SOSEvent.status == status)
-        stmt = stmt.order_by(SOSEvent.created_at.desc()).limit(100)
+        stmt = stmt.order_by(SOSEvent.created_at.desc(), SOSEvent.id.desc()).limit(100)
         events = list(db.scalars(stmt).all())
         return SOSEventsListResponse(
-            events=[SOSResponse.model_validate(e) for e in events],
+            events=[SOSResponse.model_validate(e).model_copy(update=tracking_details(db, e)) for e in events],
             total=len(events),
         )
 

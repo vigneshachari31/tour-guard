@@ -46,16 +46,19 @@ class _SosScreenState extends State<SosScreen>
       final event = events.first;
       _incidentId = event['id'] as int;
       final status = event['workflow_status'] ?? 'OPEN';
+      final responder = event['responder'] as Map<String, dynamic>?;
+      final stage = event['responder_stage'] as String? ?? 'UNASSIGNED';
       final active = status == 'OPEN' || status == 'IN_PROGRESS';
       setState(() {
         _isSosDispatched = active;
+        _responderStage = stage;
         _sosStatusMessage = 'SOS #${event['id']}: ${switch (status) {
-          'OPEN' => 'Received. Waiting for a response.',
-          'IN_PROGRESS' => 'Response started by the rescue desk.',
+          'OPEN' => responder != null ? 'Responder assigned. Awaiting acceptance.' : 'Received. Waiting for assignment.',
+          'IN_PROGRESS' => stage == 'ARRIVED' ? 'Responder arrival confirmed.' : stage == 'DEPARTED' ? 'Responder departure confirmed.' : 'Response started by the rescue desk.',
           'RESOLVED' => 'Resolved by the rescue desk.',
           'CANCELLED' => 'Cancelled.',
           _ => 'Status unavailable.',
-        }}';
+        }}${responder == null ? '' : '\nResponder: ${responder['name']} • ${responder['phone']}\nProgress: $stage (recorded by rescue desk)'}';
       });
     } catch (_) {
       if (mounted && _isSosDispatched) setState(() => _sosStatusMessage = 'Status updates unavailable. Retrying; your SOS may still be active.');
@@ -66,6 +69,14 @@ class _SosScreenState extends State<SosScreen>
   bool _isSosDispatched = false;
   bool _isSosDispatching = false;
   String? _sosStatusMessage;
+  String _responderStage = 'UNASSIGNED';
+  String get _stageLabel => switch (_responderStage) {
+    'ASSIGNED' => 'ASSIGNED',
+    'ACCEPTED' => 'ACCEPTED',
+    'DEPARTED' => 'ON THE WAY',
+    'ARRIVED' => 'ARRIVED',
+    _ => 'SOS RECEIVED',
+  };
 
   // ─── Live Telemetry State ───────────────────────────────────────────────────
   LatLng? _currentLocation;
@@ -324,7 +335,7 @@ class _SosScreenState extends State<SosScreen>
                     const SizedBox(width: 8),
                     Text(
                       _isSosDispatched
-                          ? '✅ SOS INCIDENT RECORDED'
+                          ? _stageLabel
                           : _isSosDispatching
                           ? '⏳ RECORDING SOS INCIDENT'
                           : '⚡ SOS BACKEND READY',
@@ -440,7 +451,7 @@ class _SosScreenState extends State<SosScreen>
                                 ],
                               )
                             : _isSosDispatched
-                            ? const Column(
+                            ? Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Icon(
@@ -450,7 +461,7 @@ class _SosScreenState extends State<SosScreen>
                                   ),
                                   SizedBox(height: 4),
                                   Text(
-                                    'ACTIVE',
+                                    _stageLabel,
                                     style: TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w900,
@@ -492,7 +503,7 @@ class _SosScreenState extends State<SosScreen>
                 _isCountingDown
                     ? 'Transmitting distress packet in $_countdownSeconds seconds...'
                     : _isSosDispatched
-                    ? 'Demo backend accepted the incident; no emergency services were contacted.'
+                    ? 'Your SOS is being tracked by the Tour Guard rescue desk.'
                     : _isSosDispatching
                     ? 'Sending current GPS location to the backend...'
                     : 'Tap SOS to record your location after a 3-second countdown',
@@ -508,10 +519,10 @@ class _SosScreenState extends State<SosScreen>
                 textAlign: TextAlign.center,
               ),
 
-              if (_sosStatusMessage != null) ...[
+              if (_isSosDispatched) ...[
                 const SizedBox(height: 8),
                 Text(
-                  _sosStatusMessage!,
+                  'Public emergency services are not contacted automatically. Use the call option if you need them.',
                   style: const TextStyle(
                     fontSize: 12,
                     color: Color(0xFFFCA5A5),

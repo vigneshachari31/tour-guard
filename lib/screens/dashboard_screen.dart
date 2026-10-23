@@ -14,6 +14,7 @@ import '../widgets/dashboard/search_destination_bar.dart';
 import '../widgets/dashboard/smart_rescue_card.dart';
 import 'map_screen.dart';
 import 'sos_screen.dart';
+import 'risk_radar_screen.dart';
 
 // ==============================================================================
 // 📱 MAIN DASHBOARD SCREEN (TOUR GUARD)
@@ -771,9 +772,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           title: Text('Active SOS #${_activeSos!['id']}'),
                           subtitle: Text(_sosOffline
                             ? 'Updates unavailable. Last received status shown.'
-                            : _activeSos!['workflow_status'] == 'IN_PROGRESS'
-                              ? 'Rescue desk has started the response.'
-                              : 'Received. Waiting for a response.'),
+                            : switch (_activeSos!['responder_stage']) {
+                                'ASSIGNED' => 'Responder assigned. Awaiting acceptance.',
+                                'ACCEPTED' => 'Responder acceptance confirmed.',
+                                'DEPARTED' => 'Responder is on the way.',
+                                'ARRIVED' => 'Responder arrival confirmed.',
+                                _ => 'Received. Waiting for assignment.',
+                              }),
                           trailing: const Icon(Icons.chevron_right),
                           onTap: _navigateToSos,
                         ),
@@ -798,7 +803,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                     // 4. 2x2 Core Safety Services Grid (AI Radar, Route, Sharing, Reports)
                     SafetyServicesGrid(
-                      onRiskRadarTap: () => _navigateToMap(null, true),
+                      onRiskRadarTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RiskRadarScreen())),
                       onSafeRouteTap: () => _navigateToMap(),
                       onLiveSharingTap: _handleLiveSharing,
                       onReportHazardTap: _showReportHazardDialog,

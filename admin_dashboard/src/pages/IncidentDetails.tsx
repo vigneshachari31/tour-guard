@@ -58,7 +58,13 @@ export default function IncidentDetails() {
         <>
           <div className="detail-grid">
             <section>
-              <RescueMap incidents={[incident]} hazards={hazards.data} />
+              <RescueMap incidents={[{...incident, latitude: incident.sos_location.latitude, longitude: incident.sos_location.longitude}]} hazards={hazards.data} />
+              <div className="panel">
+                <h3>SOS location</h3>
+                <p>{incident.sos_location.stale ? "Location stale — last received position" : "Recent GPS position"} · {date(incident.sos_location.captured_at)}</p>
+                <p>Accuracy: {incident.sos_location.accuracy == null ? "Not recorded" : `±${Math.round(incident.sos_location.accuracy)} m`}. Updates require the tourist app to be open.</p>
+                <small>Original SOS: {incident.latitude}, {incident.longitude}</small>
+              </div>
               <div className="panel">
                 <h2>{incident.tourist.full_name || incident.tourist_id}</h2>
                 <p>
@@ -137,6 +143,19 @@ export default function IncidentDetails() {
               <p>Choose an available responder and enter an action note (at least 3 characters) to assign them.</p>
               <hr />
               <h3>Update incident status</h3>
+              {incident.responder && transitions[incident.status].length > 0 && <div>
+                <p>{incident.responder.name} · {incident.responder.phone} · {incident.responder_stage}</p>
+                <p>Record progress only after confirming with the responder.</p>
+                {({"ASSIGNED": "ACCEPTED", "ACCEPTED": "DEPARTED", "DEPARTED": "ARRIVED"} as Record<string,string>)[incident.responder_stage] && <button
+                  disabled={busy || note.trim().length < 3}
+                  onClick={() => action(`/incidents/${id}/progress`, {
+                    assignment_id: incident.responder!.assignment_id,
+                    stage: ({"ASSIGNED": "ACCEPTED", "ACCEPTED": "DEPARTED", "DEPARTED": "ARRIVED"} as Record<string,string>)[incident.responder_stage],
+                    note,
+                  }, "PATCH")}>
+                  Confirm {({"ASSIGNED": "acceptance", "ACCEPTED": "departure", "DEPARTED": "arrival"} as Record<string,string>)[incident.responder_stage]}
+                </button>}
+              </div>}
               {transitions[incident.status].map((status) => (
                 <button
                   key={status}
@@ -175,7 +194,11 @@ export default function IncidentDetails() {
                   title: "Transition",
                   render: (h) => `${h.old_status} → ${h.new_status}`,
                 },
-                { title: "Note", render: (h) => h.notes },
+                { title: "Note", render: (h) => {
+                    if (h.new_status !== "RESPONDER_PROGRESS" || !h.notes) return h.notes;
+                    try { const progress = JSON.parse(h.notes); return `${progress.stage}: ${progress.note}`; }
+                    catch { return h.notes; }
+                }},
                 { title: "Time", render: (h) => date(h.created_at) },
               ]}
             />
@@ -209,7 +232,10 @@ export default function IncidentDetails() {
           </section>
         </>
       ) : (
-        <p>Loading incident…</p>
+        <div role="status">
+          <p>{data.loading ? "Loading incident…" : "Unable to load this incident."}</p>
+          {!data.loading && <button onClick={data.refresh}>Retry incident</button>}
+        </div>
       )}
     </>
   );

@@ -391,6 +391,10 @@ class ApiService {
     await _post('/sos/events/$id/cancel', {});
   }
 
+  Future<Map<String, dynamic>> getRiskRadar(double latitude, double longitude) async {
+    return await _post('/risk/radar?latitude=$latitude&longitude=$longitude', {}, method: 'GET');
+  }
+
   Future<List<Map<String, dynamic>>> getSosHistory() async {
     final response = await _post('/sos/events', {}, method: 'GET');
     final events = response['events'];
@@ -398,6 +402,13 @@ class ApiService {
       return events.whereType<Map<String, dynamic>>().toList();
     }
     return [];
+  }
+
+  Future<void> updateSosLocation(int id, double latitude, double longitude, double accuracy, DateTime capturedAt) async {
+    await _post('/sos/events/$id/location', {
+      'latitude': latitude, 'longitude': longitude, 'accuracy': accuracy,
+      'captured_at': capturedAt.toUtc().toIso8601String(),
+    });
   }
 
   Future<List<AdminSosEvent>> getAdminSosEvents() async {

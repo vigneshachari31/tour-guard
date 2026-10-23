@@ -1,13 +1,15 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { api } from "./api";
 export function useResource<T>(path: string, pollMs = 0) {
   const [data, setData] = useState<T>();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [version, setVersion] = useState(0);
+  const pending = useRef(false);
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
   useEffect(() => {
     const controller = new AbortController();
+    pending.current = true;
     setLoading(true);
     setError("");
     api<T>(path, { signal: controller.signal })
@@ -18,13 +20,16 @@ export function useResource<T>(path: string, pollMs = 0) {
         if (!controller.signal.aborted) setError(e.message);
       })
       .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
+        if (!controller.signal.aborted) {
+          pending.current = false;
+          setLoading(false);
+        }
       });
     return () => controller.abort();
   }, [path, version]);
   useEffect(() => {
     if (!pollMs) return;
-    const id = setInterval(refresh, pollMs);
+    const id = setInterval(() => { if (!pending.current) refresh(); }, pollMs);
     return () => clearInterval(id);
   }, [pollMs, refresh]);
   return { data, error, loading, refresh };

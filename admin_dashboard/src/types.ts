@@ -42,6 +42,9 @@ export type Assignment = {
   created_at: string;
 };
 export type IncidentDetail = Incident & {
+  responder: {id: number; name: string; phone: string; assignment_id: number} | null;
+  responder_stage: string;
+  sos_location: {latitude: number; longitude: number; captured_at: string; accuracy: number | null; stale: boolean};
   history: History[];
   assignments: Assignment[];
   trips: Trip[];

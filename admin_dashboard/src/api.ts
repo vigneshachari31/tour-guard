@@ -11,7 +11,9 @@ export async function api<T>(
   const current = token;
   const response = await fetch(`/api/v1/admin${path}`, {
     method: options.method ?? "GET",
-    signal: options.signal,
+    signal: options.signal
+      ? AbortSignal.any([options.signal, AbortSignal.timeout(45000)])
+      : AbortSignal.timeout(45000),
     cache: "no-store",
     headers: {
       "Content-Type": "application/json",

@@ -376,9 +376,11 @@ def incidents(
 
 
 @router.get("/incidents/{identity}")
-def incident_detail(identity: int, admin: Admin, db: DB):
+def incident_detail(identity: int, admin: Admin, db: DB, include_trips: bool = False):
+    from .sos_tracking import tracking_details
     incident = required(db, SOSEvent, identity)
     result = incident_dict(db, incident)
+    result.update(tracking_details(db, incident))
     user = db.scalar(select(User).where(User.tourist_id == incident.tourist_id))
     profile = (
         db.scalar(select(UserProfile).where(UserProfile.user_id == user.id))
@@ -394,7 +396,7 @@ def incident_detail(identity: int, admin: Admin, db: DB):
         row(h, "id old_status new_status changed_by_id notes created_at")
         for h in db.scalars(
             select(SOSHistory)
-            .where(SOSHistory.sos_event_id == identity)
+            .where(SOSHistory.sos_event_id == identity, SOSHistory.new_status != "GPS_UPDATE")
             .order_by(SOSHistory.id)
         )
     ]
@@ -414,7 +416,7 @@ def incident_detail(identity: int, admin: Admin, db: DB):
             .order_by(Trip.id.desc())
             .limit(20)
         )
-    ]
+    ] if include_trips else []
     return result
 
 
