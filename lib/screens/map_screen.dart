@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../services/api_service.dart';
@@ -44,6 +46,7 @@ class MapScreen extends StatefulWidget {
   final ApiService? api;
   final Future<List<LocationSearchResult>> Function(String)? searchPlaces;
   final TileProvider? tileProvider;
+  final Future<Position> Function()? locate;
   const MapScreen({
     super.key,
     this.tripState,
@@ -53,13 +56,69 @@ class MapScreen extends StatefulWidget {
     this.api,
     this.searchPlaces,
     this.tileProvider,
+    this.locate,
   });
 
   @override
   State<MapScreen> createState() => _MapScreenState();
 }
 
-class _MapScreenState extends State<MapScreen> {
+class _MapScreenState extends State<MapScreen>
+    with SingleTickerProviderStateMixin {
+  bool _cameraLockedToUser = true;
+  bool _mapReady = false;
+  late int _observedTripRevision;
+  late final AnimationController _followAnimation;
+  LatLng? _cameraFrom, _cameraTo;
+
+  void _followUser({bool instantly = false}) {
+    final point = _trips.position ?? _userGpsLocation;
+    if (!_mapReady || point == null || !_cameraLockedToUser) return;
+    _followAnimation.stop();
+    if (instantly) {
+      _mapController.rotate(
+        0,
+      ); // North-up map; arrow retains actual travel heading.
+      _mapController.move(point, _mapController.camera.zoom);
+    } else {
+      _cameraFrom = _mapController.camera.center;
+      _cameraTo = point;
+      _followAnimation.forward(from: 0);
+    }
+  }
+
+  Future<void> _recenterOnUser() async {
+    _cameraLockedToUser = true;
+    if (_trips.trip == null && _sourceLocation == null) {
+      await _initMobileGpsTracking();
+      return;
+    }
+    if (_trips.position != null || _userGpsLocation != null) {
+      _followUser(instantly: true);
+      return;
+    }
+    try {
+      final gps = await (widget.locate ?? requireCurrentLocation)();
+      if (!mounted) return;
+      final point = LatLng(gps.latitude, gps.longitude);
+      setState(() => _userGpsLocation = point);
+      _trips.updatePosition(point, heading: gps.heading);
+      _followUser(instantly: true);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              error is ApiException
+                  ? error.message
+                  : 'Location unavailable. Check GPS permissions.',
+            ),
+          ),
+        );
+      }
+    }
+  }
+
   // ─── Map & Routing State Variables ──────────────────────────────────────────
   final MapController _mapController = MapController();
   final TextEditingController _sourceController = TextEditingController();
@@ -111,6 +170,31 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void initState() {
     super.initState();
+    _followAnimation =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 350),
+        )..addListener(() {
+          if (!_mapReady ||
+              !_cameraLockedToUser ||
+              _cameraFrom == null ||
+              _cameraTo == null) {
+            return;
+          }
+          final t = Curves.easeOut.transform(_followAnimation.value);
+          final lngDelta =
+              ((_cameraTo!.longitude - _cameraFrom!.longitude + 540) % 360) -
+              180;
+          _mapController.move(
+            LatLng(
+              _cameraFrom!.latitude +
+                  (_cameraTo!.latitude - _cameraFrom!.latitude) * t,
+              ((_cameraFrom!.longitude + lngDelta * t + 540) % 360) - 180,
+            ),
+            _mapController.camera.zoom,
+          );
+        });
+    _observedTripRevision = _trips.revision;
     final trip = _trips.trip;
     if (trip != null) {
       _sourceName = trip.originName;
@@ -152,6 +236,7 @@ class _MapScreenState extends State<MapScreen> {
     HazardCatalog.instance.removeListener(_catalogChanged);
     _trips.removeListener(_onTripCleared);
     _debounceTimer?.cancel();
+    _followAnimation.dispose();
     _mapController.dispose();
     _sourceController.dispose();
     _destinationController.dispose();
@@ -160,6 +245,11 @@ class _MapScreenState extends State<MapScreen> {
 
   void _onTripCleared() {
     if (!mounted) return;
+    final lifecycleChanged = _observedTripRevision != _trips.revision;
+    _observedTripRevision = _trips.revision;
+    // Hazard refreshes also notify while planning. Only an explicit lifecycle
+    // change (End Trip/logout) may clear the draft and cancel its request.
+    if (_trips.trip == null && !lifecycleChanged) return;
     if (_trips.trip != null) {
       if (_routeRisk != null &&
           _trips.trip!.route.tripId == _routeRisk!.tripId) {
@@ -177,11 +267,17 @@ class _MapScreenState extends State<MapScreen> {
           }
         });
       }
-      if (_trips.position != null) {
-        _mapController.move(_trips.position!, _mapController.camera.zoom);
+      if (_trips.position != null &&
+          !_trips.completed &&
+          _routeRisk?.tripId == _trips.trip?.route.tripId &&
+          _cameraTo != _trips.position) {
+        _followUser();
       }
       return;
     }
+    _followAnimation.stop();
+    _cameraLockedToUser = true;
+    _cameraTo = null;
     _gpsRequestId++;
     _searchRequestId++;
     _debounceTimer?.cancel();
@@ -445,7 +541,7 @@ class _MapScreenState extends State<MapScreen> {
     final id = ++_gpsRequestId;
     setState(() => _isLoadingGps = true);
     try {
-      final position = await requireCurrentLocation();
+      final position = await (widget.locate ?? requireCurrentLocation)();
       if (!mounted || id != _gpsRequestId) return;
       final point = LatLng(position.latitude, position.longitude);
       setState(() {
@@ -698,22 +794,32 @@ class _MapScreenState extends State<MapScreen> {
 
   // Display and assess the same route returned by FastAPI.
   Future<void> _calculateRoute({bool startTrip = false}) async {
-    if (_isCalculatingRoute) return;
-    setState(_invalidateRoute);
+    // Resolve the default current-location source instead of silently doing nothing.
+    if (_sourceLocation == null &&
+        _destinationLocation != null &&
+        _sourceController.text.trim().isEmpty) {
+      if (!_isLoadingGps) await _initMobileGpsTracking();
+      return;
+    }
+    if (startTrip && _isCalculatingRoute) return;
+    // Starting is a transition of the preview, not a new route search.
+    // Keep its geometry and summary visible while GPS/backend work is pending.
+    if (!startTrip) setState(_invalidateRoute);
     final start = _sourceLocation;
     final end = _destinationLocation;
     if (start == null || end == null) return;
     final requestId = ++_routeRequestId;
     final tripRevision = _trips.revision;
     setState(() {
+      _riskError = null;
       _isCalculatingRoute = true;
       _isLoadingRisk = true;
       _isLoadingHazards = true;
     });
     try {
       LatLng? initialPosition;
-      if (startTrip && widget.api == null) {
-        final gps = await requireCurrentLocation();
+      if (startTrip && (widget.api == null || widget.locate != null)) {
+        final gps = await (widget.locate ?? requireCurrentLocation)();
         if (!mounted || requestId != _routeRequestId) return;
         initialPosition = LatLng(gps.latitude, gps.longitude);
       }
@@ -748,6 +854,8 @@ class _MapScreenState extends State<MapScreen> {
         _nearbyHazards = result.hazards;
       });
       if (startTrip) {
+        _cameraLockedToUser = true;
+        _cameraTo = null;
         _trips.start(
           ActiveTrip(
             originName: _sourceName,
@@ -931,7 +1039,20 @@ class _MapScreenState extends State<MapScreen> {
             mapController: _mapController,
             options: MapOptions(
               initialCenter: effectiveSource,
-              onMapReady: _fitRouteBounds,
+              onMapReady: () {
+                _mapReady = true;
+                if (_trips.position != null && !_trips.completed) {
+                  _followUser(instantly: true);
+                } else {
+                  _fitRouteBounds();
+                }
+              },
+              onPositionChanged: (camera, hasGesture) {
+                if (hasGesture) {
+                  _cameraLockedToUser = false;
+                  _followAnimation.stop();
+                }
+              },
               initialZoom: 14.5,
               minZoom: 3.0,
               maxZoom: 18.0,
@@ -969,17 +1090,6 @@ class _MapScreenState extends State<MapScreen> {
               MarkerLayer(
                 markers: [
                   ..._buildHazardMarkers(),
-                  if (_userGpsLocation != null)
-                    Marker(
-                      point: _userGpsLocation!,
-                      width: 40,
-                      height: 40,
-                      child: Icon(
-                        _trips.completed ? Icons.flag : Icons.navigation,
-                        color: _trips.completed ? Colors.green : Colors.blue,
-                        size: 36,
-                      ),
-                    ),
                   // LIVE USER GPS / SOURCE MARKER
                   if (_sourceLocation != null)
                     Marker(
@@ -1050,6 +1160,49 @@ class _MapScreenState extends State<MapScreen> {
                           Icons.place_rounded,
                           color: Color(0xFF4285F4),
                           size: 30,
+                        ),
+                      ),
+                    ),
+                  if (_userGpsLocation != null)
+                    Marker(
+                      point: _userGpsLocation!,
+                      width: 54,
+                      height: 54,
+                      child: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF087CF0)
+                              .withValues(alpha: 0.25),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: _trips.completed
+                                ? Colors.green
+                                : const Color(0xFF087CF0),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 3),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x33000000),
+                                blurRadius: 8,
+                                offset: Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: Transform.rotate(
+                            key: const ValueKey('live-heading-arrow'),
+                            angle: _trips.completed
+                                ? 0
+                                : _trips.currentHeading * math.pi / 180,
+                            child: Icon(
+                              _trips.completed
+                                  ? Icons.flag
+                                  : Icons.navigation_rounded,
+                              color: Colors.white,
+                              size: 16,
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -1354,13 +1507,7 @@ class _MapScreenState extends State<MapScreen> {
                   heroTag: 'fab_gps',
                   backgroundColor: Colors.white,
                   foregroundColor: const Color(0xFF087CF0),
-                  onPressed: () {
-                    if (_userGpsLocation != null) {
-                      _mapController.move(_userGpsLocation!, 15.0);
-                    } else {
-                      _initMobileGpsTracking();
-                    }
-                  },
+                  onPressed: _recenterOnUser,
                   tooltip: 'Center on Live Location',
                   child: _isLoadingGps
                       ? const SizedBox(
@@ -1404,7 +1551,9 @@ class _MapScreenState extends State<MapScreen> {
                         ? (_trips.completed
                               ? 'TRIP COMPLETED'
                               : 'TRIP IN PROGRESS')
-                        : 'START TRIP',
+                        : (_isCalculatingRoute
+                              ? 'STARTING TRIP...'
+                              : 'START TRIP'),
                     onStartTrip:
                         _isCalculatingRoute ||
                             (_routeRisk?.tripId != null &&

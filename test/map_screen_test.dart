@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -35,6 +36,109 @@ class BlankTiles extends TileProvider {
 }
 
 void main() {
+  for (final recenterFirst in [false, true]) {
+    testWidgets(
+      'GPS source restores route and start button; recenter=$recenterFirst',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(1200, 1000));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        Map<String, dynamic>? sent;
+        final trips = ActiveTripState();
+        var failGps = false;
+        final api = ApiService(
+          store: MemorySession(),
+          client: MockClient((request) async {
+            sent = jsonDecode(request.body) as Map<String, dynamic>;
+            return http.Response(
+              jsonEncode({
+                'geometry': {
+                  'type': 'LineString',
+                  'coordinates': [
+                    [72.8, 19.0],
+                    [72.9, 19.1],
+                  ],
+                },
+                'distance_meters': 3000,
+                'duration_seconds': 300,
+                'buffer_meters': 250,
+                'hazards': [],
+                'assessment': {
+                  'level': 'SAFE',
+                  'method': 'heuristic_v1',
+                  'reasons': [],
+                  'limitations': [],
+                  'weather_used': false,
+                },
+              }),
+              200,
+            );
+          }),
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            home: MapScreen(
+              api: api,
+              tripState: trips,
+              tileProvider: BlankTiles(),
+              locate: () async {
+                if (failGps) throw Exception('GPS unavailable');
+                return Position(
+                  latitude: 19,
+                  longitude: 72.8,
+                  timestamp: DateTime.now(),
+                  accuracy: 5,
+                  altitude: 0,
+                  altitudeAccuracy: 0,
+                  heading: 90,
+                  headingAccuracy: 1,
+                  speed: 1,
+                  speedAccuracy: 1,
+                );
+              },
+              searchPlaces: (_) async => [
+                LocationSearchResult(
+                  displayName: 'Dharavi Destination',
+                  latitude: 19.1,
+                  longitude: 72.9,
+                ),
+              ],
+            ),
+          ),
+        );
+        if (recenterFirst) {
+          await tester.tap(find.byTooltip('Center on Live Location'));
+          await tester.pumpAndSettle();
+        }
+        await tester.enterText(find.byType(TextField).at(1), 'Dharavi');
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pump();
+        await tester.tap(find.text('Dharavi Destination'));
+        await tester.pumpAndSettle();
+        expect(sent?['origin_lat'], 19);
+        expect(sent?['origin_lng'], 72.8);
+        expect(find.text('Current Location'), findsWidgets);
+        expect(find.byType(PolylineLayer), findsOneWidget);
+        expect(find.text('START TRIP'), findsOneWidget);
+        expect(trips.trip, isNull);
+        final arrow = tester.widget<Transform>(
+          find.byKey(const ValueKey('live-heading-arrow')),
+        );
+        expect((arrow.child as Icon).icon, Icons.navigation_rounded);
+        expect((arrow.child as Icon).color, Colors.white);
+        failGps = true;
+        await tester.tap(find.text('START TRIP'));
+        await tester.pumpAndSettle();
+        expect(find.byType(PolylineLayer), findsOneWidget);
+        expect(find.text('START TRIP'), findsOneWidget);
+        expect(trips.trip, isNull);
+        expect(sent?['start_trip'], false);
+        await tester.pumpWidget(const SizedBox());
+        api.close();
+        trips.dispose();
+      },
+    );
+  }
+
   testWidgets(
     'Ending a trip cancels a pending analysis and clears map fields',
     (tester) async {
@@ -122,6 +226,8 @@ void main() {
         addTearDown(() => tester.binding.setSurfaceSize(null));
         final trips = ActiveTripState();
         Map<String, dynamic>? sent;
+        final pendingStart = Completer<http.Response>();
+        var startAttempts = 0;
         final api = ApiService(
           store: MemorySession(),
           client: MockClient((request) async {
@@ -129,6 +235,9 @@ void main() {
               return http.Response('{"status":"cancelled"}', 200);
             }
             sent = jsonDecode(request.body) as Map<String, dynamic>;
+            if (request.url.path.endsWith('/start') && startAttempts++ == 0) {
+              return pendingStart.future;
+            }
             if (fails) {
               return http.Response('{"detail":"Routing unavailable"}', 503);
             }
@@ -216,9 +325,34 @@ void main() {
           expect(find.text('SAFE'), findsNothing);
         } else {
           expect(trips.trip, isNull); // Preview must not create a trip.
+          // The app-wide hazard catalog refreshes even before a trip exists.
+          trips.updateActiveHazards([]);
+          await tester.pump();
+          expect(find.byType(PolylineLayer), findsOneWidget);
+          expect(find.text('START TRIP'), findsOneWidget);
+          await tester.tap(find.text('START TRIP'));
+          await tester.pump();
+          expect(find.byType(PolylineLayer), findsOneWidget);
+          expect(find.text('STARTING TRIP...'), findsOneWidget);
+          trips.updateActiveHazards([]);
+          await tester.pump();
+          expect(find.byType(PolylineLayer), findsOneWidget);
+          expect(find.text('STARTING TRIP...'), findsOneWidget);
+          expect(trips.trip, isNull);
+          pendingStart.complete(
+            http.Response('{"detail":"Start service unavailable"}', 503),
+          );
+          await tester.pumpAndSettle();
+          expect(find.byType(PolylineLayer), findsOneWidget);
+          expect(find.text('START TRIP'), findsOneWidget);
+          expect(trips.trip, isNull);
           await tester.tap(find.text('START TRIP'));
           await tester.pumpAndSettle();
           expect(sent!['start_trip'], isTrue);
+          expect(find.text('TRIP IN PROGRESS'), findsOneWidget);
+          trips.updateActiveHazards([]);
+          trips.updatePosition(const LatLng(11.411, 76.696), heading: 90);
+          await tester.pumpAndSettle();
           expect(find.text('TRIP IN PROGRESS'), findsOneWidget);
           final layer = tester.widget<PolylineLayer>(
             find.byType(PolylineLayer),
@@ -231,7 +365,7 @@ void main() {
           expect(find.text('HIGH RISK'), findsOneWidget);
           expect(find.textContaining('Test slope'), findsOneWidget);
           final markers = tester.widget<MarkerLayer>(find.byType(MarkerLayer));
-          expect(markers.markers.length, 2);
+          expect(markers.markers.length, 3);
           await tester.enterText(
             find.byType(TextField).at(0),
             'Changed source',

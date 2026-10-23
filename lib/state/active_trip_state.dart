@@ -34,6 +34,7 @@ class ActiveTripState extends ChangeNotifier {
   ActiveTrip? _trip;
   int _revision = 0;
   LatLng? position;
+  double currentHeading = 0;
   double? distanceToDestination;
   bool arrived = false;
   List<GeofenceHazard> activeHazards = [];
@@ -44,8 +45,29 @@ class ActiveTripState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void updatePosition(LatLng point) {
+  void updatePosition(LatLng point, {double? heading}) {
     if (_trip == null || arrived) return;
+    final previous = position;
+    if (heading != null && heading.isFinite && heading > 0 && heading < 360) {
+      currentHeading = heading;
+    } else if (previous != null &&
+        Geolocator.distanceBetween(
+              previous.latitude,
+              previous.longitude,
+              point.latitude,
+              point.longitude,
+            ) >=
+            2) {
+      currentHeading =
+          (Geolocator.bearingBetween(
+                previous.latitude,
+                previous.longitude,
+                point.latitude,
+                point.longitude,
+              ) +
+              360) %
+          360;
+    }
     position = point;
     distanceToDestination = Geolocator.distanceBetween(
       point.latitude,
@@ -66,6 +88,7 @@ class ActiveTripState extends ChangeNotifier {
   void start(ActiveTrip trip) {
     _trip = trip;
     position = null;
+    currentHeading = 0;
     distanceToDestination = null;
     arrived = false;
     activeHazards = [];
@@ -77,6 +100,7 @@ class ActiveTripState extends ChangeNotifier {
   void clear() {
     _trip = null;
     position = null;
+    currentHeading = 0;
     distanceToDestination = null;
     arrived = false;
     activeHazards = [];

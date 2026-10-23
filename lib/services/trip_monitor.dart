@@ -17,11 +17,13 @@ class TripMonitor extends ChangeNotifier {
   final bool useStreaming;
   final bool useWebSocket;
   final Stream<LatLng> Function()? positions;
-  StreamSubscription<LatLng>? _positions;
+  StreamSubscription<({LatLng point, double? heading})>? _positions;
   TripSocket? _socket;
   LatLng? _pendingPosition;
   VoidCallback? onCompleted;
   void Function(LatLng)? onPosition;
+  void Function(LatLng, double?)? onNavigationPosition;
+  double? _pendingHeading;
   void Function(List<GeofenceHazard>)? onHazards;
   final Future<LatLng> Function() locate;
   final Duration interval;
@@ -98,16 +100,23 @@ class TripMonitor extends ChangeNotifier {
       return;
     }
     final stream =
-        positions?.call() ??
+        positions?.call().map((p) => (point: p, heading: null as double?)) ??
         Geolocator.getPositionStream(
           locationSettings: const LocationSettings(
             accuracy: LocationAccuracy.high,
             distanceFilter: 5,
           ),
-        ).map((p) => LatLng(p.latitude, p.longitude));
+        ).map(
+          (p) => (
+            point: LatLng(p.latitude, p.longitude),
+            heading: p.heading as double?,
+          ),
+        );
     _positions = stream.listen(
       (point) {
-        if (generation == _generation) unawaited(poll(point));
+        if (generation == _generation) {
+          unawaited(poll(point.point, point.heading));
+        }
       },
       onError: (_) {
         if (!_disposed && generation == _generation) {
@@ -118,11 +127,17 @@ class TripMonitor extends ChangeNotifier {
     );
   }
 
-  Future<void> poll([LatLng? sample]) async {
+  Future<void> poll([LatLng? sample, double? heading]) async {
     final id = _tripId, generation = _generation;
     if (_disposed || !_foreground || id == null) return;
+    if (sample != null) {
+      onNavigationPosition?.call(sample, heading);
+    }
     if (_busy) {
-      if (sample != null) _pendingPosition = sample;
+      if (sample != null) {
+        _pendingPosition = sample;
+        _pendingHeading = heading;
+      }
       return;
     }
     _busy = true;
@@ -133,6 +148,9 @@ class TripMonitor extends ChangeNotifier {
       if (_disposed || generation != _generation) return;
       locating = false;
       onPosition?.call(position);
+      if (sample == null && _pendingPosition == null) {
+        onNavigationPosition?.call(position, null);
+      }
       GeofenceUpdate update;
       try {
         if (!useStreaming || !useWebSocket) throw StateError('HTTP transport');
@@ -178,7 +196,7 @@ class TripMonitor extends ChangeNotifier {
         notifyListeners();
         final pending = _pendingPosition;
         _pendingPosition = null;
-        if (pending != null) unawaited(poll(pending));
+        if (pending != null) unawaited(poll(pending, _pendingHeading));
       }
     }
   }
