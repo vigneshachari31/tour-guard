@@ -223,6 +223,9 @@ void main() {
           final layer = tester.widget<PolylineLayer>(
             find.byType(PolylineLayer),
           );
+          expect(trips.trip, isNull);
+          await tester.tap(find.text('START TRIP'));
+          await tester.pumpAndSettle();
           expect(trips.trip?.originName, 'Ooty Source');
           expect(trips.trip?.destinationName, 'Pykara Destination');
           expect(trips.trip?.riskLevel, 'HIGH RISK');

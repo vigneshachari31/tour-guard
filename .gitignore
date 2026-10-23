@@ -1,5 +1,7 @@
 # Miscellaneous
 venv/
+.venv/
+.venv-collaborator-backup/
 backend/.venv/
 backend/.env
 __pycache__/

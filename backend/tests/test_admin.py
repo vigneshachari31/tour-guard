@@ -295,6 +295,7 @@ def test_trip_risk_history_and_location_ownership(client, monkeypatch):
             "dest_lng": 76.8,
             "origin_name": "Test origin",
             "destination_name": "Test destination",
+            "start_trip": True,
         },
     )
     assert result.status_code == 201

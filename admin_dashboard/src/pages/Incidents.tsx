@@ -68,7 +68,9 @@ export default function Incidents() {
             {
               title: "Responder",
               render: (i) =>
-                i.responder_id ? `#${i.responder_id}` : "Unassigned",
+                <Link to={`/incidents/${i.id}`}>
+                  {i.responder_id ? `Manage responder #${i.responder_id}` : "Assign responder"}
+                </Link>,
             },
           ]}
         />
