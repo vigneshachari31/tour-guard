@@ -62,6 +62,20 @@ class HazardSummary {
 }
 
 class RouteResponse {
+  bool get hasDistinctOriginal {
+    if (originalPoints.isEmpty) return false;
+    if (originalPoints.length != points.length) return true;
+    for (var i = 0; i < points.length; i++) {
+      if ((originalPoints[i].latitude - points[i].latitude).abs() > 0.000001 ||
+          (originalPoints[i].longitude - points[i].longitude).abs() > 0.000001) {
+        return true;
+      }
+    }
+    return false;
+  }
+  final List<LatLng> originalPoints;
+  final int originalHazardCount;
+  final double originalDurationSeconds;
   final int? tripId;
   final List<LatLng> points;
   final double distanceMeters, durationSeconds, bufferMeters;
@@ -70,6 +84,9 @@ class RouteResponse {
   final List<HazardSummary> hazards;
   final bool weatherUsed;
   const RouteResponse({
+    this.originalPoints = const [],
+    this.originalHazardCount = 0,
+    this.originalDurationSeconds = 0,
     this.tripId,
     required this.points,
     required this.distanceMeters,
@@ -113,6 +130,10 @@ class RouteResponse {
     }
 
     return RouteResponse(
+      originalPoints: ((json['original_geometry']?['coordinates'] as List?) ?? [])
+          .map((p) => LatLng((p[1] as num).toDouble(), (p[0] as num).toDouble())).toList(),
+      originalHazardCount: json['original_hazard_count'] as int? ?? 0,
+      originalDurationSeconds: (json['original_duration_seconds'] as num?)?.toDouble() ?? 0,
       tripId: json['trip_id'] as int?,
       points: points,
       distanceMeters: metric('distance_meters'),

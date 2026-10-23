@@ -10,6 +10,7 @@ import '../services/api_service.dart';
 import '../services/hazard_catalog.dart';
 import '../services/current_location.dart';
 import '../models/route_response.dart';
+import '../widgets/route_safety_details.dart';
 import '../state/active_trip_state.dart';
 import '../services/routing_service.dart';
 
@@ -140,6 +141,7 @@ class _MapScreenState extends State<MapScreen>
 
   // Route details
   List<LatLng> _routePoints = [];
+  bool _preferSafer = false;
   double _routeDistanceKm = 0.0;
   double _routeDurationMin = 0.0;
   RouteResponse? _routeRisk;
@@ -793,7 +795,7 @@ class _MapScreenState extends State<MapScreen>
   }
 
   // Display and assess the same route returned by FastAPI.
-  Future<void> _calculateRoute({bool startTrip = false}) async {
+  Future<void> _calculateRoute({bool startTrip = false, bool safer = false}) async {
     // Resolve the default current-location source instead of silently doing nothing.
     if (_sourceLocation == null &&
         _destinationLocation != null &&
@@ -805,6 +807,7 @@ class _MapScreenState extends State<MapScreen>
     // Starting is a transition of the preview, not a new route search.
     // Keep its geometry and summary visible while GPS/backend work is pending.
     if (!startTrip) setState(_invalidateRoute);
+    if (!startTrip) _preferSafer = safer;
     final start = _sourceLocation;
     final end = _destinationLocation;
     if (start == null || end == null) return;
@@ -825,6 +828,7 @@ class _MapScreenState extends State<MapScreen>
       }
       final result = await (widget.api ?? ApiService.instance).analyzeRoute(
         startTrip: startTrip,
+        routePreference: _preferSafer ? 'safest' : 'fastest',
         initialLatitude: initialPosition?.latitude,
         initialLongitude: initialPosition?.longitude,
         originLat: start.latitude,
@@ -896,7 +900,10 @@ class _MapScreenState extends State<MapScreen>
     if (_routePoints.isEmpty) return;
 
     try {
-      final bounds = LatLngBounds.fromPoints(_routePoints);
+      final bounds = LatLngBounds.fromPoints([
+        ..._routePoints,
+        ...?_routeRisk?.originalPoints,
+      ]);
       _mapController.fitCamera(
         CameraFit.bounds(
           bounds: bounds,
@@ -1073,6 +1080,12 @@ class _MapScreenState extends State<MapScreen>
               if (_routePoints.isNotEmpty)
                 PolylineLayer(
                   polylines: [
+                    if (_routeRisk?.hasDistinctOriginal ?? false)
+                      Polyline(
+                        points: _routeRisk!.originalPoints,
+                        color: const Color(0xFF89939F),
+                        strokeWidth: 7,
+                      ),
                     Polyline(
                       points: _routePoints,
                       color: const Color(0xFF087CF0).withValues(alpha: 0.3),
@@ -1564,6 +1577,24 @@ class _MapScreenState extends State<MapScreen>
                 ),
               ),
             ),
+          if (_routePoints.isNotEmpty && _routeRisk?.tripId == null)
+            Positioned(
+              left: 16,
+              right: 90,
+              bottom: MediaQuery.sizeOf(context).height * .38 + 30,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton.icon(
+                  onPressed: _isCalculatingRoute ? null : () => _calculateRoute(safer: !_preferSafer),
+                  icon: Icon(_preferSafer ? Icons.compare_arrows : Icons.alt_route),
+                  label: Text(_preferSafer
+                      ? (_routeRisk?.hasDistinctOriginal ?? false)
+                          ? 'Blue: selected / Grey: original · Show original'
+                          : 'No different lower-hazard route found · Show original'
+                      : 'Find safer route'),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -1775,14 +1806,37 @@ class _RouteRiskSummaryCard extends StatelessWidget {
 
           if (risk != null || riskError != null) ...[
             const SizedBox(height: 8),
-            Text(
-              risk != null
-                  ? [...risk!.reasons, ...risk!.limitations].join(' ')
-                  : riskError ?? 'Risk service unavailable.',
-              style: const TextStyle(
-                fontSize: 11,
-                height: 1.3,
-                color: Color(0xFF64748B),
+            Semantics(
+              button: risk != null,
+              label: 'Route selection. Tap for risk assessment details',
+              child: GestureDetector(
+                onTap: risk == null
+                    ? null
+                    : () => showDialog<void>(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('Your journey at a glance'),
+                          content: SingleChildScrollView(
+                            child: SizedBox(width: 440, child: RouteSafetyDetails(route: risk!)),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('Close'),
+                            ),
+                          ],
+                        ),
+                      ),
+                child: Text(
+                  risk != null
+                      ? '${routeSummary(risk!)} Tap for details.'
+                      : riskError ?? 'Risk service unavailable.',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    height: 1.3,
+                    color: Color(0xFF64748B),
+                  ),
+                ),
               ),
             ),
           ],

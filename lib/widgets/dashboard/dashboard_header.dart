@@ -9,28 +9,45 @@ class DashboardHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFFE2EAF4)),
+      ),
+      child: Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        const Column(
+        Container(
+          width: 66, height: 66,
+          padding: const EdgeInsets.all(5),
+          decoration: BoxDecoration(color: const Color(0xFFF1F7FF), borderRadius: BorderRadius.circular(16)),
+          child: Image.asset('assets/images/tour_guard_logo.png', fit: BoxFit.contain,
+              semanticLabel: 'Tour Guard logo'),
+        ),
+        const SizedBox(width: 14),
+        const Expanded(child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'TOUR GUARD',
               style: TextStyle(
-                fontSize: 24,
+                fontSize: 21,
+                letterSpacing: 0.5,
                 fontWeight: FontWeight.bold,
                 color: Color(0xFF1A2D4F), // Dark navy
               ),
             ),
             SizedBox(height: 4),
             Text(
-              'Your safety is our priority.',
-              style: TextStyle(fontSize: 14, color: Color(0xFF8A99AF)),
+              'Explore with confidence.',
+              style: TextStyle(fontSize: 13, color: Color(0xFF657A96)),
             ),
           ],
-        ),
+        )),
         IconButton(
+          tooltip: 'Notifications',
           onPressed: () {
             // TODO: Open Notifications / Advisories drawer
           },
@@ -41,6 +58,7 @@ class DashboardHeader extends StatelessWidget {
           ),
         ),
       ],
+      ),
     );
   }
 }

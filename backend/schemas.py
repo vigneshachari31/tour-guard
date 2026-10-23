@@ -65,6 +65,7 @@ class InitialPosition(InputModel):
 class RouteRequest(InputModel):
     initial_position: InitialPosition | None = None
     start_trip: bool = False
+    route_preference: Literal["fastest", "safest"] = "safest"
     origin_lat: Latitude
     origin_lng: Longitude
     dest_lat: Latitude
@@ -99,6 +100,9 @@ class RiskAssessment(BaseModel):
 
 
 class RouteResponse(BaseModel):
+    original_geometry: RouteGeometry | None = None
+    original_hazard_count: int = 0
+    original_duration_seconds: float = 0
     trip_id: int | None = None
     geometry: RouteGeometry
     distance_meters: float

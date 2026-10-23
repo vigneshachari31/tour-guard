@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/geofence_update.dart';
 import '../../models/route_response.dart';
+import '../route_safety_details.dart';
 import '../../state/active_trip_state.dart';
 
 class RouteRiskCard extends StatelessWidget {
@@ -14,7 +15,49 @@ class RouteRiskCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final result = trip?.route ?? route;
-    final color = switch (result?.riskLevel) {
+    if (result == null) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft, end: Alignment.bottomRight,
+            colors: [Color(0xFF102B50), Color(0xFF145DA0)],
+          ),
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Row(children: [
+            Icon(Icons.explore_outlined, color: Color(0xFF8ED3FF), size: 20),
+            SizedBox(width: 8),
+            Expanded(child: Text('YOUR NEXT JOURNEY', style: TextStyle(color: Color(0xFFB9DEFF), fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.5))),
+          ]),
+          const SizedBox(height: 14),
+          const Text('Where are you heading?', style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          const Text('Choose a destination to compare routes, check reported hazards and view weather before you go.',
+              style: TextStyle(color: Color(0xFFD4E5F7), fontSize: 14, height: 1.5)),
+          const SizedBox(height: 18),
+          Wrap(spacing: 10, runSpacing: 10, children: [
+            for (final item in ['Route comparison', 'Hazard reports', 'Weather checks'])
+              Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                decoration: BoxDecoration(color: Colors.white.withValues(alpha: .09), borderRadius: BorderRadius.circular(20)),
+                child: Text(item, style: const TextStyle(color: Color(0xFFD4E5F7), fontSize: 12))),
+          ]),
+          if (onOpenMap != null) ...[
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              onPressed: onOpenMap,
+              style: FilledButton.styleFrom(backgroundColor: Colors.white, foregroundColor: const Color(0xFF145DA0),
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14)),
+              icon: const Icon(Icons.alt_route, size: 20),
+              label: const Text('Plan your journey'),
+            ),
+          ],
+        ]),
+      );
+    }
+    final color = switch (result.riskLevel) {
       'SAFE' => Colors.green,
       'CAUTION' => Colors.orange,
       'HIGH RISK' => Colors.red,
@@ -30,7 +73,6 @@ class RouteRiskCard extends StatelessWidget {
               Text(ActiveTripState.instance.arrived ? 'You’ve arrived!' : 'Trip in progress', style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
               if (ActiveTripState.instance.distanceToDestination != null)
                 Text('${(ActiveTripState.instance.distanceToDestination! / 1000).toStringAsFixed(2)} km to destination (straight-line)'),
-              const Text('Original route estimate below', style: TextStyle(fontSize: 12, color: Colors.blueGrey)),
               Text(
                 '${trip!.originName} ➔ ${trip!.destinationName}',
                 style: const TextStyle(
@@ -48,29 +90,20 @@ class RouteRiskCard extends StatelessWidget {
                 Chip(
                   backgroundColor: color.withValues(alpha: .12),
                   label: Text(
-                    result?.riskLevel ?? 'Route not assessed',
+                    result.riskLevel,
                     style: TextStyle(color: color, fontWeight: FontWeight.bold),
                   ),
                 ),
-                if (result != null)
                   Text(
                     '${(result.distanceMeters / 1000).toStringAsFixed(1)} km • ${(result.durationSeconds / 60).ceil()} mins',
                   ),
               ],
             ),
-            if (result == null)
-              const Text('Search for a destination to assess your route.')
-            else ...[
-              _buildHazardAlertSection(
-                context,
-                ActiveTripState.instance.activeHazards,
-                result.hazards,
-              ),
-              Text(
-                result.hazards.isEmpty
-                    ? 'No hazards reported along this route.'
-                    : '${result.hazards.length} reported hazard zone(s) along your route.',
-              ),
+            ...[
+              _buildHazardAlertSection(context, ActiveTripState.instance.activeHazards, result.hazards),
+              if (result.hazards.isEmpty && ActiveTripState.instance.activeHazards.isEmpty)
+                const Text('No hazards reported along this route.',
+                    style: TextStyle(color: Colors.blueGrey, fontSize: 13)),
               if (!result.weatherUsed)
                 const Text(
                   'Live weather not assessed.',
@@ -81,6 +114,8 @@ class RouteRiskCard extends StatelessWidget {
                 style: TextStyle(color: Colors.blueGrey, fontSize: 12),
               ),
               ExpansionTile(
+                dense: true,
+                visualDensity: VisualDensity.compact,
                 tilePadding: EdgeInsets.zero,
                 childrenPadding: const EdgeInsets.only(bottom: 12),
                 title: const Text(
@@ -90,24 +125,13 @@ class RouteRiskCard extends StatelessWidget {
                 children: [
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        for (final hazard in result.hazards)
-                          Text(
-                            '${hazard.name}: ${hazard.hazardType.replaceAll('_', ' ')} (severity ${hazard.severity}/5)',
-                          ),
-                        for (final reason in result.reasons) Text(reason),
-                        for (final limitation in result.limitations)
-                          Text(limitation),
-                      ],
-                    ),
+                    child: RouteSafetyDetails(route: result),
                   ),
                 ],
               ),
               if (trip != null && onEndTrip != null) ...[
+                Wrap(spacing: 12, runSpacing: 4, children: [
                 TextButton.icon(onPressed: onOpenMap, icon: const Icon(Icons.map_outlined), label: const Text('OPEN MAP')),
-                const SizedBox(height: 8),
                 TextButton.icon(
                   onPressed: () async {
                     final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
@@ -123,6 +147,7 @@ class RouteRiskCard extends StatelessWidget {
                   icon: const Icon(Icons.stop_circle_outlined),
                   label: Text(ActiveTripState.instance.arrived ? 'FINISH TRIP' : 'END TRIP'),
                 ),
+                ]),
               ],
             ],
           ],

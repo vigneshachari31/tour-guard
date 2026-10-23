@@ -28,7 +28,9 @@ from backend.models import (
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
+    # Keep endpoint tests independent of external weather services.
+    monkeypatch.setattr("backend.main.fetch_route_weather", lambda *args: None)
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )

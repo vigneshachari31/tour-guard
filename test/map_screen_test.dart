@@ -116,6 +116,12 @@ void main() {
         await tester.pumpAndSettle();
         expect(sent?['origin_lat'], 19);
         expect(sent?['origin_lng'], 72.8);
+        expect(sent?['route_preference'], 'fastest');
+        await tester.tap(find.text('Find safer route'));
+        await tester.pumpAndSettle();
+        expect(sent?['route_preference'], 'safest');
+        expect(find.textContaining('No different lower-hazard route found'), findsOneWidget);
+        expect(find.textContaining('Grey: original'), findsNothing);
         expect(find.text('Current Location'), findsWidgets);
         expect(find.byType(PolylineLayer), findsOneWidget);
         expect(find.text('START TRIP'), findsOneWidget);
@@ -310,6 +316,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(sent, {
           'start_trip': false,
+          'route_preference': 'fastest',
           'origin_lat': 11.4102,
           'origin_lng': 76.695,
           'dest_lat': 11.45,

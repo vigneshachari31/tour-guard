@@ -213,7 +213,7 @@ def test_analyze_endpoint_authentication_and_response(client, monkeypatch):
         type="LineString", coordinates=[(76.7, 11.4), (76.8, 11.5)]
     )
     monkeypatch.setattr(
-        "backend.main.fetch_route", lambda *args: (geometry, 14000, 1800)
+        "backend.main.fetch_routes", lambda *args: [(geometry, 14000, 1800)]
     )
     monkeypatch.setattr("backend.main.nearby_hazards", lambda *args: [])
     client.app.dependency_overrides[get_http] = lambda: None

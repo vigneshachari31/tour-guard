@@ -276,12 +276,12 @@ def test_trip_risk_history_and_location_ownership(client, monkeypatch):
     _, _, other, _ = account(client)
     _, _, admin, _ = account(client, "admin")
     monkeypatch.setattr(
-        "backend.main.fetch_route",
-        lambda *args: (
+        "backend.main.fetch_routes",
+        lambda *args: [(
             RouteGeometry(type="LineString", coordinates=[(76.7, 11.4), (76.8, 11.5)]),
             3300,
             300,
-        ),
+        )],
     )
     monkeypatch.setattr("backend.main.nearby_hazards", lambda *args: [])
     client.app.dependency_overrides[get_http] = lambda: None

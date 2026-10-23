@@ -96,14 +96,14 @@ def test_start_preserves_route_and_real_initial_position(client, monkeypatch):
 
     _, _, headers, _ = account(client)
     monkeypatch.setattr(
-        "backend.main.fetch_route",
-        lambda *args: (
+        "backend.main.fetch_routes",
+        lambda *args: [(
             RouteGeometry(
                 type="LineString", coordinates=[(72.85, 19.04), (72.86, 19.05)]
             ),
             1500,
             300,
-        ),
+        )],
     )
     monkeypatch.setattr("backend.main.nearby_hazards", lambda *args: [])
     client.app.dependency_overrides[get_http] = lambda: None

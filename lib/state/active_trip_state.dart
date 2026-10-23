@@ -122,6 +122,9 @@ class ActiveTripState extends ChangeNotifier {
       origin: current.origin,
       destination: current.destination,
       route: RouteResponse(
+        originalPoints: route.originalPoints,
+        originalHazardCount: route.originalHazardCount,
+        originalDurationSeconds: route.originalDurationSeconds,
         tripId: route.tripId,
         points: route.points,
         distanceMeters: route.distanceMeters,

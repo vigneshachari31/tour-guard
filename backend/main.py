@@ -26,7 +26,7 @@ if __package__:
     from .config import get_settings
     from .database import get_db, get_engine
     from .models import HazardZone, RiskAssessmentLog, SOSEvent, Trip, User
-    from .risk_engine import assess_risk, fetch_route, nearby_hazards
+    from .risk_engine import assess_risk, fetch_routes, nearby_hazards, choose_route, fetch_route_weather
     from .routers.admin import router as admin_router
     from .routers.profile import router as profile_router
     from .routers.trips import router as trips_router
@@ -58,7 +58,7 @@ else:
     from config import get_settings
     from database import get_db, get_engine
     from models import HazardZone, RiskAssessmentLog, SOSEvent, Trip, User
-    from risk_engine import assess_risk, fetch_route, nearby_hazards
+    from risk_engine import assess_risk, fetch_routes, nearby_hazards, choose_route, fetch_route_weather
     from routers.admin import router as admin_router
     from routers.profile import router as profile_router
     from routers.trips import router as trips_router
@@ -254,19 +254,39 @@ def create_app() -> FastAPI:
         db: DB,
         client: Annotated[httpx.Client, Depends(get_http)],
     ) -> RouteResponse:
-        geometry, distance, duration = fetch_route(body, client)
-        hazards = nearby_hazards(db, geometry, settings.route_buffer_meters)
+        candidates = fetch_routes(body, client)
+        original = min(candidates, key=lambda c: (c[2], c[1]))
+        hazard_cache = {}
+        def lookup(geometry):
+            key = geometry.model_dump_json()
+            if key not in hazard_cache:
+                hazard_cache[key] = nearby_hazards(db, geometry, settings.route_buffer_meters)
+            return hazard_cache[key]
+        (geometry, distance, duration), hazards, selection = choose_route(
+            candidates, lookup
+        )
+        if body.route_preference == "fastest":
+            geometry, distance, duration = original
+            hazards = lookup(geometry)
+            selection = "Original fastest route. Tap Find safer route to compare reported hazards."
+        elif geometry == original[0] and len(candidates) > 1:
+            selection = "Original route is already the lowest-hazard option. " + selection
+        weather = fetch_route_weather(body.origin_lat, body.origin_lng, client)
         result = RouteResponse(
+            original_geometry=original[0],
+            original_hazard_count=len(lookup(original[0])),
+            original_duration_seconds=original[2],
             geometry=geometry,
             distance_meters=distance,
             duration_seconds=duration,
             buffer_meters=settings.route_buffer_meters,
             hazards=hazards,
             assessment=assess_risk(
-                hazards, body.weather, settings.hazard_coverage_verified
+                hazards, weather, settings.hazard_coverage_verified, server_weather=True
             ),
         )
 
+        result.assessment.reasons.insert(0, selection)
         if not body.start_trip and request.url.path != "/api/v1/trips/start":
             return result
 

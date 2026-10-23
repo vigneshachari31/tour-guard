@@ -301,11 +301,13 @@ class ApiService {
     String? originName,
     String? destinationName,
     bool startTrip = false,
+    String routePreference = 'safest',
     double? initialLatitude,
     double? initialLongitude,
   }) async {
     final json = await _post(startTrip ? '/trips/start' : '/route/analyze', {
       'start_trip': startTrip,
+      'route_preference': routePreference,
       if (initialLatitude != null && initialLongitude != null)
         'initial_position': {
           'latitude': initialLatitude,
