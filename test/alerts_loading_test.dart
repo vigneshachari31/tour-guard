@@ -61,7 +61,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(requests, 2);
       }
-      expect(find.text('No Active Emergency Beacons'), findsOneWidget);
+      expect(find.text('No SOS activity yet'), findsOneWidget);
       trips.updateActiveHazards([]);
       await tester.pumpAndSettle();
       expect(requests, fails ? 2 : 1);

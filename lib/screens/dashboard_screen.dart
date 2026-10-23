@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../widgets/sos_alert_card.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -261,7 +262,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         const SizedBox(width: 10),
                         const Expanded(
                           child: Text(
-                            'Report Hazard to Safety Radar',
+                            'Report Incident',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -340,7 +341,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     const SizedBox(height: 16),
                     const Text(
-                      'Hazard Type',
+                      'Incident Type',
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
                         fontSize: 13,
@@ -359,6 +360,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       ),
                       items: const [
+                        DropdownMenuItem(
+                          value: 'accident',
+                          child: Text('Road Accident'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'fire',
+                          child: Text('Fire / Smoke'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'fallen_tree',
+                          child: Text('Fallen Tree'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'damaged_road',
+                          child: Text('Damaged Road / Pothole'),
+                        ),
                         DropdownMenuItem(
                           value: 'landslide',
                           child: Text('Landslide / Rockfall'),
@@ -382,6 +399,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         DropdownMenuItem(
                           value: 'animal',
                           child: Text('Wildlife Hazard'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'other',
+                          child: Text('Other Incident'),
                         ),
                       ],
                       onChanged: (val) {
@@ -437,7 +458,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     const SizedBox(height: 14),
                     const Text(
-                      'Hazard Description',
+                      'Incident Description',
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
                         fontSize: 13,
@@ -502,7 +523,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   ).showSnackBar(
                                     SnackBar(
                                       content: Text(
-                                        'Hazard "${result['name']}" reported successfully (ID: #${result['id']}).',
+                                        'Incident reported successfully (ID: #${result['id']}).',
                                       ),
                                       backgroundColor: const Color(0xFF1EAA55),
                                     ),
@@ -515,7 +536,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   ).showSnackBar(
                                     SnackBar(
                                       content: Text(
-                                        error is ApiException ? error.message : 'Failed to record hazard report. Please check your connection and retry.',
+                                        error is ApiException ? error.message : 'Failed to submit incident report. Please check your connection and retry.',
                                       ),
                                       backgroundColor: const Color(0xFFDC2626),
                                     ),
@@ -532,7 +553,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 ),
                               )
                             : const Text(
-                                'SUBMIT HAZARD REPORT',
+                                'SUBMIT INCIDENT REPORT',
                                 style: TextStyle(fontWeight: FontWeight.bold),
                               ),
                       ),
@@ -549,7 +570,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildAlertsView() {
     return SafeArea(
-      child: RefreshIndicator(
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: SizedBox(
+          width: 1100,
+          child: RefreshIndicator(
         onRefresh: _reloadAlerts,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -564,7 +589,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 locate: widget.reportLocation,
               ),
               const Text(
-                'YOUR SOS RECORDS & ALERTS',
+                'Your SOS activity',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w800,
@@ -636,7 +661,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                             SizedBox(height: 12),
                             Text(
-                              'No Active Emergency Beacons',
+                              'No SOS activity yet',
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -645,7 +670,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                             SizedBox(height: 6),
                             Text(
-                              'You have no active SOS records. This does not indicate current travel conditions.',
+                              'Your SOS requests and status updates will appear here.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 13,
@@ -676,7 +701,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                'Emergency records logged in rescue registry. Responder dispatch is unconfirmed unless direct integration is active.',
+                                'These are Tour Guard records. Public emergency services are not contacted automatically.',
                                 style: TextStyle(
                                   fontSize: 11.5,
                                   color: Color(0xFF7C5A22),
@@ -687,96 +712,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       ),
                       for (final event in events)
-                        Card(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          color: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            side: const BorderSide(color: Color(0xFFFFD4D4)),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFDC2626),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: const Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.emergency,
-                                            color: Colors.white,
-                                            size: 14,
-                                          ),
-                                          SizedBox(width: 4),
-                                          Text(
-                                            'ACTIVE SOS BEACON',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const Spacer(),
-                                    Text(
-                                      'ID: #${event['id']}',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 13,
-                                        color: Color(0xFF64748B),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 10),
-                                Text(
-                                  'Tourist: ${event['tourist_id'] ?? 'Unassigned'}',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 14,
-                                    color: Color(0xFF1A2D4F),
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'GPS: ${event['latitude']?.toStringAsFixed(5)}, ${event['longitude']?.toStringAsFixed(5)}',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    color: Color(0xFF087CF0),
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Time: ${event['created_at']}',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Color(0xFF94A3B8),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                        SosAlertCard(event: event),
                     ],
                   );
                 },
               ),
             ],
           ),
+        ),
+      ),
         ),
       ),
     );

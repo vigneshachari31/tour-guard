@@ -5,7 +5,6 @@ import { useResource, date } from "../hooks";
 import type { Hazards, HazardProperties } from "../types";
 import { Badge, Heading, Notice, Table } from "../components/UI";
 import RescueMap from "../components/RescueMap";
-import HazardModeration from "../components/HazardModeration";
 type Point = [number, number];
 const empty = {
   name: "",
@@ -17,7 +16,6 @@ const empty = {
 };
 export default function HazardsPage() {
   const data = useResource<Hazards>("/hazards?include_inactive=true", 15000);
-  const reports = useResource<{id: number; description: string | null; hazard_type: string; severity: number; latitude: number; longitude: number; created_at: string}[]>("/hazards/reports?status=verified", 15000);
   const [form, setForm] = useState(empty);
   const [editing, setEditing] = useState<number>();
   const [points, setPoints] = useState<Point[]>([]);
@@ -125,7 +123,7 @@ export default function HazardsPage() {
   return (
     <>
       <Heading eyebrow="GEOGRAPHIC RISK DATA" title="Hazard zone manager" />
-      <HazardModeration />
+      <p>Admin-defined hazard zones. Tourist reports are managed separately under Reported Incidents.</p>
       <Notice error={error || data.error} />
       <div className="map-toolbar">
         <button onClick={() => setDrawing(!drawing)}>
@@ -141,22 +139,7 @@ export default function HazardsPage() {
         <span>Click to add vertices; drag numbered handles to edit.</span>
       </div>
       <RescueMap
-        hazards={{
-          type: "FeatureCollection",
-          features: [
-            ...(visibleHazards?.features ?? []),
-            ...(reports.data ?? []).map((r) => ({
-              type: "Feature" as const,
-              geometry: {type: "Point" as const, coordinates: [r.longitude, r.latitude] as [number, number]},
-              properties: {
-                id: -r.id, name: r.description || r.hazard_type,
-                hazard_type: r.hazard_type, severity: r.severity,
-                source: "Verified tourist report", is_active: true,
-                valid_from: null, valid_until: null, created_at: r.created_at, updated_at: r.created_at,
-              },
-            })),
-          ],
-        }}
+        hazards={visibleHazards}
         draw={drawing ? points : undefined}
         onDraw={drawing ? draw : undefined}
       />

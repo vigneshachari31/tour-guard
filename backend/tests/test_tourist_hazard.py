@@ -1,10 +1,12 @@
 from unittest.mock import MagicMock
+import pytest
 from backend.routers.hazards import report_tourist_hazard
 from backend.schemas import TouristHazardReportCreate, TouristHazardReportResponse
 from backend.models import TouristHazardReport, HazardZone, User
 
 
-def test_tourist_hazard_report_saves_to_dedicated_table_not_hazard_zones():
+@pytest.mark.parametrize("incident_type", ["landslide", "accident", "fire", "fallen_tree", "damaged_road", "other"])
+def test_tourist_hazard_report_saves_to_dedicated_table_not_hazard_zones(incident_type):
     user = User(
         id=1,
         email="tourist@example.com",
@@ -23,7 +25,7 @@ def test_tourist_hazard_report_saves_to_dedicated_table_not_hazard_zones():
     body = TouristHazardReportCreate(
         latitude=11.4102,
         longitude=76.6950,
-        hazard_type="landslide",
+        hazard_type=incident_type,
         severity=4,
         description="Fallen boulder near hairpin bend 3",
     )
@@ -38,7 +40,7 @@ def test_tourist_hazard_report_saves_to_dedicated_table_not_hazard_zones():
 
     # 2. Verify TouristHazardReport fields
     assert added_obj.tourist_id == "TG-12345678"
-    assert added_obj.hazard_type == "landslide"
+    assert added_obj.hazard_type == incident_type
     assert added_obj.severity == 4
     assert added_obj.description == "Fallen boulder near hairpin bend 3"
     assert added_obj.status == "pending"
@@ -47,7 +49,7 @@ def test_tourist_hazard_report_saves_to_dedicated_table_not_hazard_zones():
     assert isinstance(response, TouristHazardReportResponse)
     assert response.id == 42
     assert response.tourist_id == "TG-12345678"
-    assert response.hazard_type == "landslide"
+    assert response.hazard_type == incident_type
     assert response.severity == 4
     assert response.description == "Fallen boulder near hairpin bend 3"
     assert response.status == "pending"

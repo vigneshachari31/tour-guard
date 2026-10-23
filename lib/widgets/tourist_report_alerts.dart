@@ -70,8 +70,8 @@ class _TouristReportAlertsState extends State<TouristReportAlerts> {
         children: [
           const Expanded(
             child: Text(
-              'TOURIST REPORTS NEAR YOU',
-              style: TextStyle(fontWeight: FontWeight.bold),
+              'Nearby incidents',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18, color: Color(0xFF1A2D4F)),
             ),
           ),
           IconButton(
@@ -81,7 +81,8 @@ class _TouristReportAlertsState extends State<TouristReportAlerts> {
           ),
         ],
       ),
-      const Text('Within 2 km of your current location'),
+      const Text('Within 2 km · Not necessarily on your route', style: TextStyle(fontSize: 12, color: Colors.blueGrey)),
+      const SizedBox(height: 10),
       if (_busy && _reports == null) const LinearProgressIndicator(),
       if (_error != null)
         Text('$_error${_reports == null ? '' : ' Showing previous reports.'}'),
@@ -92,6 +93,10 @@ class _TouristReportAlertsState extends State<TouristReportAlerts> {
         ),
       for (final report in _reports ?? <Map<String, dynamic>>[])
         Card(
+          elevation: 0,
+          color: Colors.white,
+          margin: const EdgeInsets.only(bottom: 10),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: Color(0xFFE2E8F0))),
           child: ListTile(
             leading: Icon(
               Icons.warning_amber_rounded,
@@ -99,7 +104,7 @@ class _TouristReportAlertsState extends State<TouristReportAlerts> {
                   ? Colors.red
                   : Colors.orange,
             ),
-            title: Text(report['name'] as String),
+            title: Text(report['name'] as String, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
             subtitle: Text(
               '${report['hazard_type']} - Severity ${report['severity']}/5\n${report['status'] == 'verified' ? 'Admin verified' : 'Awaiting verification'}',
             ),

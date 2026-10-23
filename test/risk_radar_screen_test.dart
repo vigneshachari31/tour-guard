@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,6 +12,41 @@ import 'package:travel_risk_app/services/api_service.dart';
 import 'map_screen_test.dart' show MemorySession;
 
 void main() {
+  testWidgets('Movement queues latest coordinates and discards stale response', (tester) async {
+    Position point(double lat) => Position(latitude: lat, longitude: 72, timestamp: DateTime.now(),
+        accuracy: 5, altitude: 0, altitudeAccuracy: 0, heading: 0, headingAccuracy: 0, speed: 0, speedAccuracy: 0);
+    final positions = StreamController<Position>();
+    final first = Completer<http.Response>();
+    final requested = <String>[];
+    http.Response response(int score) => http.Response(jsonEncode({
+      'score': score, 'risk_level': score == 20 ? 'LOW' : 'HIGH', 'factors': [], 'checked_at': 'test',
+    }), 200);
+    final api = ApiService(store: MemorySession(), client: MockClient((request) async {
+      requested.add(request.url.queryParameters['latitude']!);
+      if (requested.length == 1) return first.future;
+      return response(20);
+    }));
+    await tester.pumpWidget(MaterialApp(home: RiskRadarScreen(
+      api: api, locate: () async => point(19), positions: positions.stream)));
+    await tester.pump();
+    positions.add(point(19.01));
+    await tester.pump();
+    positions.add(point(19.02));
+    await tester.pump();
+    first.complete(response(100));
+    await tester.pumpAndSettle();
+    expect(requested, ['19.0', '19.02']);
+    expect(find.text('20%'), findsOneWidget);
+    expect(find.text('100%'), findsNothing);
+    expect(find.textContaining('19.02000'), findsOneWidget);
+    positions.add(point(19.02001));
+    await tester.pump();
+    expect(requested.length, 2);
+    await tester.pumpWidget(const SizedBox());
+    expect(positions.hasListener, isFalse);
+    unawaited(positions.close());
+    api.close();
+  });
   for (final entry in [
     (20, 'LOW', Colors.green),
     (50, 'MODERATE', Colors.amber),

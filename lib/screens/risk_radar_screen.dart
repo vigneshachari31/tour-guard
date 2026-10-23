@@ -9,7 +9,8 @@ import '../services/current_location.dart';
 class RiskRadarScreen extends StatefulWidget {
   final ApiService? api;
   final Future<Position> Function()? locate;
-  const RiskRadarScreen({super.key, this.api, this.locate});
+  final Stream<Position>? positions;
+  const RiskRadarScreen({super.key, this.api, this.locate, this.positions});
   @override
   State<RiskRadarScreen> createState() => _RiskRadarScreenState();
 }
@@ -20,6 +21,28 @@ class _RiskRadarScreenState extends State<RiskRadarScreen>
   String? _error;
   bool _busy = false, _foreground = true;
   Timer? _timer;
+  StreamSubscription<Position>? _locations;
+  Position? _requestedPosition, _assessedPosition, _pendingPosition;
+  bool _refreshRequested = false;
+
+  void _watchLocation() {
+    if (_locations != null || !_foreground) return;
+    // Injected location providers stay isolated from device plugins in tests.
+    if (widget.locate != null && widget.positions == null) return;
+    final stream = widget.positions ?? Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 50),
+    );
+    _locations = stream.listen((position) {
+      if (!mounted || !_foreground) return;
+      final previous = _pendingPosition ?? _requestedPosition;
+      if (previous == null || Geolocator.distanceBetween(previous.latitude, previous.longitude,
+          position.latitude, position.longitude) >= 50) {
+        _load(position: position);
+      }
+    }, onError: (Object error) {
+      if (mounted) setState(() => _error = 'Location tracking interrupted. Enable GPS and refresh.');
+    });
+  }
   @override
   void initState() {
     super.initState();
@@ -33,22 +56,45 @@ class _RiskRadarScreenState extends State<RiskRadarScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _foreground = state == AppLifecycleState.resumed;
-    if (_foreground) _load();
+    if (_foreground) {
+      _load();
+    } else {
+      _locations?.cancel();
+      _locations = null;
+      _pendingPosition = null;
+    }
   }
 
-  Future<void> _load() async {
-    if (_busy) return;
+  Future<void> _load({Position? position}) async {
+    if (!mounted || !_foreground) return;
+    if (_busy) {
+      if (position != null) _pendingPosition = position;
+      if (position == null) _refreshRequested = true;
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      final p = await (widget.locate ?? requireCurrentLocation)();
+      final p = position ?? await (widget.locate ?? requireCurrentLocation)();
+      if (!mounted || !_foreground) return;
+      final age = DateTime.now().difference(p.timestamp);
+      if (age > const Duration(minutes: 2) || age < const Duration(seconds: -30)) {
+        throw const ApiException('GPS returned an old location. Enable precise location and retry.');
+      }
+      _requestedPosition = p;
+      _watchLocation();
       final data = await (widget.api ?? ApiService.instance).assessRisk(
         p.latitude,
         p.longitude,
       );
-      if (mounted) setState(() => _data = data);
+      if (mounted && _foreground && _pendingPosition == null) {
+        setState(() {
+          _data = data;
+          _assessedPosition = p;
+        });
+      }
     } catch (e) {
       if (mounted) {
         setState(
@@ -58,13 +104,25 @@ class _RiskRadarScreenState extends State<RiskRadarScreen>
         );
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+        final pending = _pendingPosition;
+        final refresh = _refreshRequested;
+        _refreshRequested = false;
+        _pendingPosition = null;
+        if (_foreground && pending != null) {
+          unawaited(_load(position: pending));
+        } else if (_foreground && refresh) {
+          unawaited(_load());
+        }
+      }
     }
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _locations?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -99,6 +157,11 @@ class _RiskRadarScreenState extends State<RiskRadarScreen>
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
+          if (_assessedPosition != null)
+            Text('Assessed location: ${_assessedPosition!.latitude.toStringAsFixed(5)}, ${_assessedPosition!.longitude.toStringAsFixed(5)}',
+                style: const TextStyle(fontSize: 12, color: Colors.blueGrey)),
+          if (_busy && _data != null)
+            const Text('Updating for your location. Previous assessment shown.', style: TextStyle(color: Colors.blueGrey)),
           if (_busy) const LinearProgressIndicator(),
           if (_error != null)
             Card(

@@ -21,6 +21,7 @@ const links = [
   ["incidents", "SOS & Rescue", Siren],
   ["trips", "Trip Monitoring", Route],
   ["hazards", "Hazard Zones", ShieldAlert],
+  ["reported-incidents", "Reported Incidents", Activity],
   ["risk", "Risk History", Activity],
   ["responders", "Responders", Users],
   ["users", "Tourist Accounts", UserCheck],
@@ -42,6 +43,10 @@ const titles: Record<string, { title: string; subtitle: string }> = {
   hazards: {
     title: "Hazard Zone Manager",
     subtitle: "Manage and view geographical safety and risk zones",
+  },
+  "reported-incidents": {
+    title: "Reported Incidents",
+    subtitle: "Review and verify tourist reports independently of hazard zones",
   },
   risk: {
     title: "Risk Assessment History",

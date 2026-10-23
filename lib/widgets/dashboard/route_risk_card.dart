@@ -26,104 +26,42 @@ class RouteRiskCard extends StatelessWidget {
     if (result == null) {
       return Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF102B50), Color(0xFF145DA0)],
-          ),
-          borderRadius: BorderRadius.circular(24),
+          gradient: const LinearGradient(colors: [Color(0xFF102B50), Color(0xFF145DA0)]),
+          borderRadius: BorderRadius.circular(18),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(
-              children: [
-                Icon(
-                  Icons.explore_outlined,
-                  color: Color(0xFF8ED3FF),
-                  size: 20,
-                ),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'YOUR NEXT JOURNEY',
-                    style: TextStyle(
-                      color: Color(0xFFB9DEFF),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.5,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            const Text(
-              'Where are you heading?',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 26,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Choose a destination to compare routes, check reported hazards and view weather before you go.',
-              style: TextStyle(
-                color: Color(0xFFD4E5F7),
-                fontSize: 14,
-                height: 1.5,
-              ),
-            ),
-            const SizedBox(height: 18),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                for (final item in [
-                  'Route comparison',
-                  'Hazard reports',
-                  'Weather checks',
-                ])
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 7,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: .09),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      item,
-                      style: const TextStyle(
-                        color: Color(0xFFD4E5F7),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            if (onOpenMap != null) ...[
-              const SizedBox(height: 20),
-              FilledButton.icon(
-                onPressed: onOpenMap,
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: const Color(0xFF145DA0),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 18,
-                    vertical: 14,
-                  ),
-                ),
-                icon: const Icon(Icons.alt_route, size: 20),
-                label: const Text('Plan your journey'),
-              ),
+        child: LayoutBuilder(builder: (context, constraints) {
+          const heading = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Where are you heading?', style: TextStyle(
+                color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700)),
+              SizedBox(height: 4),
+              Text('Check routes, reports and weather before you go.',
+                style: TextStyle(color: Color(0xFFD4E5F7), fontSize: 13, height: 1.4)),
             ],
-          ],
-        ),
+          );
+          final action = onOpenMap == null ? null : FilledButton.icon(
+            onPressed: onOpenMap,
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.white, foregroundColor: const Color(0xFF145DA0)),
+            icon: const Icon(Icons.alt_route, size: 18),
+            label: const Text('Plan your journey'),
+          );
+          if (constraints.maxWidth >= 600) {
+            return Row(children: [
+              const Expanded(child: heading),
+              if (action != null) ...[const SizedBox(width: 20), action],
+            ]);
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [heading, if (action != null) ...[const SizedBox(height: 10), action]],
+          );
+        }),
       );
     }
     final color = switch (result.riskLevel) {

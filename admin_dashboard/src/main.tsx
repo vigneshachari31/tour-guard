@@ -10,6 +10,7 @@ const Incidents = lazy(() => import("./pages/Incidents"));
 const IncidentDetails = lazy(() => import("./pages/IncidentDetails"));
 const Responders = lazy(() => import("./pages/Responders"));
 const Hazards = lazy(() => import("./pages/Hazards"));
+const ReportedIncidents = lazy(() => import("./components/HazardModeration"));
 const Trips = lazy(() => import("./pages/Trips"));
 const RiskHistory = lazy(() => import("./pages/RiskHistory"));
 const Users = lazy(() => import("./pages/Users"));
@@ -27,6 +28,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="incidents/:id" element={<IncidentDetails />} />
               <Route path="responders" element={<Responders />} />
               <Route path="hazards" element={<Hazards />} />
+              <Route path="reported-incidents" element={<ReportedIncidents />} />
               <Route path="trips" element={<Trips />} />
               <Route path="risk" element={<RiskHistory />} />
               <Route path="users" element={<Users />} />
