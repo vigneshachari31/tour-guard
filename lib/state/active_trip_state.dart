@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../models/geofence_update.dart';
 import '../models/route_response.dart';
 
 /// A successfully assessed trip. Distances are metres; durations are seconds.
@@ -35,6 +36,7 @@ class ActiveTripState extends ChangeNotifier {
   LatLng? position;
   double? distanceToDestination;
   bool arrived = false;
+  List<GeofenceHazard> activeHazards = [];
   bool get completed => arrived;
   void markCompleted() {
     arrived = true;
@@ -54,6 +56,11 @@ class ActiveTripState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void updateActiveHazards(List<GeofenceHazard> hazards) {
+    activeHazards = List.unmodifiable(hazards);
+    notifyListeners();
+  }
+
   ActiveTrip? get trip => _trip;
   int get revision => _revision;
   void start(ActiveTrip trip) {
@@ -61,6 +68,7 @@ class ActiveTripState extends ChangeNotifier {
     position = null;
     distanceToDestination = null;
     arrived = false;
+    activeHazards = [];
 
     _revision++;
     notifyListeners();
@@ -71,6 +79,7 @@ class ActiveTripState extends ChangeNotifier {
     position = null;
     distanceToDestination = null;
     arrived = false;
+    activeHazards = [];
     _revision++;
     notifyListeners();
   }

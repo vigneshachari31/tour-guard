@@ -22,6 +22,7 @@ class TripMonitor extends ChangeNotifier {
   LatLng? _pendingPosition;
   VoidCallback? onCompleted;
   void Function(LatLng)? onPosition;
+  void Function(List<GeofenceHazard>)? onHazards;
   final Future<LatLng> Function() locate;
   final Duration interval;
   Timer? _timer;
@@ -36,6 +37,7 @@ class TripMonitor extends ChangeNotifier {
   void reconcileHazards(Set<int> activeIds) {
     _activeHazardIds = activeIds;
     hazards = hazards.where((h) => activeIds.contains(h.id)).toList();
+    onHazards?.call(hazards);
     if (!_disposed) notifyListeners();
   }
 
@@ -61,6 +63,7 @@ class TripMonitor extends ChangeNotifier {
     hazards = [];
     error = null;
     lastCheckedAt = null;
+    onHazards?.call(hazards);
     _restart();
     notifyListeners();
   }
@@ -153,6 +156,7 @@ class TripMonitor extends ChangeNotifier {
           .toList();
       error = null;
       lastCheckedAt = DateTime.now();
+      onHazards?.call(hazards);
       if (update.status == "COMPLETED") {
         setTrip(null);
         onCompleted?.call();
