@@ -13,7 +13,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import func, select, cast
+from geoalchemy2 import Geography
 from sqlalchemy.orm import Session
 
 if __package__ and "." in __package__:
@@ -266,3 +267,20 @@ def report_tourist_hazard(
         created_at=report.created_at,
         message="Tourist hazard report submitted successfully and is pending review.",
     )
+
+
+@router.get("/api/v1/hazards/reports/nearby")
+def nearby_tourist_reports(
+    user: CurrentUser, db: DB,
+    latitude: float = Query(ge=-90, le=90, allow_inf_nan=False),
+    longitude: float = Query(ge=-180, le=180, allow_inf_nan=False),
+) -> dict:
+    """Public report details only; never disclose reporter identity/contact data."""
+    point = cast(func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 4326), Geography(srid=4326))
+    reports = db.scalars(select(TouristHazardReport).where(
+        TouristHazardReport.status.in_(["pending", "verified"]),
+        func.ST_DWithin(cast(TouristHazardReport.location, Geography(srid=4326)), point, 2000),
+    ).order_by(TouristHazardReport.created_at.desc(), TouristHazardReport.id.desc()).limit(100)).all()
+    return {"reports": [{"id": r.id, "name": r.description or r.hazard_type,
+        "hazard_type": r.hazard_type, "severity": r.severity, "status": r.status,
+        "created_at": r.created_at} for r in reports], "radius_m": 2000}

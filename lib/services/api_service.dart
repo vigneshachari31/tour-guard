@@ -393,8 +393,30 @@ class ApiService {
     await _post('/sos/events/$id/cancel', {});
   }
 
-  Future<Map<String, dynamic>> getRiskRadar(double latitude, double longitude) async {
-    return await _post('/risk/radar?latitude=$latitude&longitude=$longitude', {}, method: 'GET');
+  Future<List<Map<String, dynamic>>> getNearbyTouristReports(
+    double lat,
+    double lng,
+  ) async {
+    final data = await _post(
+      '/hazards/reports/nearby?latitude=$lat&longitude=$lng',
+      {},
+      method: 'GET',
+    );
+    return (data['reports'] as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> assessRisk(double lat, double lng) =>
+      _post('/radar/assess?latitude=$lat&longitude=$lng', {}, method: 'GET');
+
+  Future<Map<String, dynamic>> getRiskRadar(
+    double latitude,
+    double longitude,
+  ) async {
+    return await _post(
+      '/risk/radar?latitude=$latitude&longitude=$longitude',
+      {},
+      method: 'GET',
+    );
   }
 
   Future<List<Map<String, dynamic>>> getSosHistory() async {
@@ -406,9 +428,17 @@ class ApiService {
     return [];
   }
 
-  Future<void> updateSosLocation(int id, double latitude, double longitude, double accuracy, DateTime capturedAt) async {
+  Future<void> updateSosLocation(
+    int id,
+    double latitude,
+    double longitude,
+    double accuracy,
+    DateTime capturedAt,
+  ) async {
     await _post('/sos/events/$id/location', {
-      'latitude': latitude, 'longitude': longitude, 'accuracy': accuracy,
+      'latitude': latitude,
+      'longitude': longitude,
+      'accuracy': accuracy,
       'captured_at': capturedAt.toUtc().toIso8601String(),
     });
   }

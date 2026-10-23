@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
@@ -15,6 +16,7 @@ import '../widgets/dashboard/smart_rescue_card.dart';
 import 'map_screen.dart';
 import 'sos_screen.dart';
 import 'risk_radar_screen.dart';
+import '../widgets/tourist_report_alerts.dart';
 
 // ==============================================================================
 // 📱 MAIN DASHBOARD SCREEN (TOUR GUARD)
@@ -23,7 +25,13 @@ import 'risk_radar_screen.dart';
 class DashboardScreen extends StatefulWidget {
   final ActiveTripState? tripState;
   final ApiService? api;
-  const DashboardScreen({super.key, this.tripState, this.api});
+  final Future<LatLng> Function()? reportLocation;
+  const DashboardScreen({
+    super.key,
+    this.tripState,
+    this.api,
+    this.reportLocation,
+  });
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -37,20 +45,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Map<String, dynamic>? _activeSos;
   bool _sosBusy = false;
   bool _sosOffline = false;
+  Future<List<Map<String, dynamic>>>? _alertsFuture;
+
+  Future<void> _reloadAlerts() async {
+    final request = (widget.api ?? ApiService.instance).getActiveSosEvents();
+    setState(() {
+      _alertsFuture = request;
+    });
+    try {
+      await request;
+    } catch (_) {
+      // FutureBuilder renders the error and offers Retry.
+    }
+  }
+
   Future<void> _refreshSos() async {
     if (_sosBusy) return;
     _sosBusy = true;
     try {
-      final events = await ApiService.instance.getActiveSosEvents();
-      final active = events.where((e) => ['OPEN', 'IN_PROGRESS'].contains(e['workflow_status']));
-      if (mounted) setState(() {
-        _activeSos = active.isEmpty ? null : active.first;
-        _sosOffline = false;
-      });
+      final events = await (widget.api ?? ApiService.instance)
+          .getActiveSosEvents();
+      final active = events.where(
+        (e) => ['OPEN', 'IN_PROGRESS'].contains(e['workflow_status']),
+      );
+      if (mounted) {
+        setState(() {
+          _activeSos = active.isEmpty ? null : active.first;
+          _sosOffline = false;
+          _alertsFuture = Future.value(events);
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _sosOffline = true);
-    } finally { _sosBusy = false; }
+    } finally {
+      _sosBusy = false;
+    }
   }
+
   final _destinationController = TextEditingController();
   ActiveTripState get _trips => widget.tripState ?? ActiveTripState.instance;
 
@@ -61,7 +92,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _trips.addListener(_tripChanged);
     if (widget.tripState == null) {
       _refreshSos();
-      _sosTimer = Timer.periodic(const Duration(seconds: 10), (_) => _refreshSos());
+      _sosTimer = Timer.periodic(
+        const Duration(seconds: 10),
+        (_) => _refreshSos(),
+      );
     }
   }
 
@@ -516,9 +550,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildAlertsView() {
     return SafeArea(
       child: RefreshIndicator(
-        onRefresh: () async {
-          setState(() {});
-        },
+        onRefresh: _reloadAlerts,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
@@ -527,6 +559,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               const DashboardHeader(),
               const SizedBox(height: 16),
+              TouristReportAlerts(
+                api: widget.api,
+                locate: widget.reportLocation,
+              ),
               const Text(
                 'YOUR SOS RECORDS & ALERTS',
                 style: TextStyle(
@@ -538,9 +574,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const SizedBox(height: 12),
               FutureBuilder<List<Map<String, dynamic>>>(
-                future: ApiService.instance.getActiveSosEvents(),
+                future: _alertsFuture ??= (widget.api ?? ApiService.instance)
+                    .getActiveSosEvents(),
                 builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
+                  if (snapshot.connectionState == ConnectionState.waiting &&
+                      !snapshot.hasData) {
                     return const Padding(
                       padding: EdgeInsets.symmetric(vertical: 40),
                       child: Center(child: CircularProgressIndicator()),
@@ -570,7 +608,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                             const SizedBox(height: 12),
                             ElevatedButton(
-                              onPressed: () => setState(() {}),
+                              onPressed: _reloadAlerts,
                               child: const Text('Retry'),
                             ),
                           ],
@@ -770,15 +808,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         child: ListTile(
                           leading: const Icon(Icons.sos, color: Colors.red),
                           title: Text('Active SOS #${_activeSos!['id']}'),
-                          subtitle: Text(_sosOffline
-                            ? 'Updates unavailable. Last received status shown.'
-                            : switch (_activeSos!['responder_stage']) {
-                                'ASSIGNED' => 'Responder assigned. Awaiting acceptance.',
-                                'ACCEPTED' => 'Responder acceptance confirmed.',
-                                'DEPARTED' => 'Responder is on the way.',
-                                'ARRIVED' => 'Responder arrival confirmed.',
-                                _ => 'Received. Waiting for assignment.',
-                              }),
+                          subtitle: Text(
+                            _sosOffline
+                                ? 'Updates unavailable. Last received status shown.'
+                                : switch (_activeSos!['responder_stage']) {
+                                    'ASSIGNED' => 'Responder assigned. Awaiting acceptance.',
+                                    'ACCEPTED' =>
+                                      'Responder acceptance confirmed.',
+                                    'DEPARTED' => 'Responder is on the way.',
+                                    'ARRIVED' => 'Responder arrival confirmed.',
+                                    _ => 'Received. Waiting for assignment.',
+                                  },
+                          ),
                           trailing: const Icon(Icons.chevron_right),
                           onTap: _navigateToSos,
                         ),
@@ -787,6 +828,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                     // 2. AI Safety Status & Live Environmental Card (Compact)
                     RouteRiskCard(
+                      activeHazards: _trips.activeHazards,
                       trip: _trips.trip,
                       onEndTrip: _endingTrip ? null : _endTrip,
                       onOpenMap: () => _navigateToMap(),
@@ -803,7 +845,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                     // 4. 2x2 Core Safety Services Grid (AI Radar, Route, Sharing, Reports)
                     SafetyServicesGrid(
-                      onRiskRadarTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RiskRadarScreen())),
+                      onRiskRadarTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const RiskRadarScreen(),
+                        ),
+                      ),
                       onSafeRouteTap: () => _navigateToMap(),
                       onLiveSharingTap: _handleLiveSharing,
                       onReportHazardTap: _showReportHazardDialog,
