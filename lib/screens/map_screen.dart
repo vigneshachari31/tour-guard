@@ -126,6 +126,7 @@ class _MapScreenState extends State<MapScreen> {
       _nearbyHazards = trip.route.hazards;
     }
 
+    _userGpsLocation = _trips.position;
     _trips.addListener(_onTripCleared);
     if (widget.trackGpsOnStart ||
         (_sourceLocation == null &&
@@ -165,7 +166,19 @@ class _MapScreenState extends State<MapScreen> {
         setState(() {
           _routeRisk = _trips.trip!.route;
           _nearbyHazards = _routeRisk!.hazards;
+          _userGpsLocation = _trips.position;
+          if (_trips.distanceToDestination != null) {
+            _routeDistanceKm = _trips.distanceToDestination! / 1000;
+            _routeDurationMin = _trips.trip!.distance > 0
+                ? _trips.trip!.duration *
+                      (_trips.distanceToDestination! / _trips.trip!.distance) /
+                      60
+                : 0;
+          }
         });
+      }
+      if (_trips.position != null) {
+        _mapController.move(_trips.position!, _mapController.camera.zoom);
       }
       return;
     }
@@ -698,8 +711,16 @@ class _MapScreenState extends State<MapScreen> {
       _isLoadingHazards = true;
     });
     try {
+      LatLng? initialPosition;
+      if (startTrip && widget.api == null) {
+        final gps = await requireCurrentLocation();
+        if (!mounted || requestId != _routeRequestId) return;
+        initialPosition = LatLng(gps.latitude, gps.longitude);
+      }
       final result = await (widget.api ?? ApiService.instance).analyzeRoute(
         startTrip: startTrip,
+        initialLatitude: initialPosition?.latitude,
+        initialLongitude: initialPosition?.longitude,
         originLat: start.latitude,
         originLng: start.longitude,
         destLat: end.latitude,
@@ -726,7 +747,7 @@ class _MapScreenState extends State<MapScreen> {
         _routeRisk = result;
         _nearbyHazards = result.hazards;
       });
-      if (startTrip)
+      if (startTrip) {
         _trips.start(
           ActiveTrip(
             originName: _sourceName,
@@ -736,6 +757,7 @@ class _MapScreenState extends State<MapScreen> {
             route: result,
           ),
         );
+      }
       _fitRouteBounds();
       widget.onAnalyzed?.call(result);
       // TripHazardMonitor publishes fresh device GPS and displays geofence warnings.
@@ -947,6 +969,17 @@ class _MapScreenState extends State<MapScreen> {
               MarkerLayer(
                 markers: [
                   ..._buildHazardMarkers(),
+                  if (_userGpsLocation != null)
+                    Marker(
+                      point: _userGpsLocation!,
+                      width: 40,
+                      height: 40,
+                      child: Icon(
+                        _trips.completed ? Icons.flag : Icons.navigation,
+                        color: _trips.completed ? Colors.green : Colors.blue,
+                        size: 36,
+                      ),
+                    ),
                   // LIVE USER GPS / SOURCE MARKER
                   if (_sourceLocation != null)
                     Marker(
@@ -1354,6 +1387,7 @@ class _MapScreenState extends State<MapScreen> {
                 child: SingleChildScrollView(
                   child: _RouteRiskSummaryCard(
                     sourceName: _sourceName,
+                    liveEstimate: _trips.position != null,
                     destinationName: _destinationName ?? 'Destination',
                     distanceKm: _routeDistanceKm,
                     durationMin: _routeDurationMin,
@@ -1364,7 +1398,19 @@ class _MapScreenState extends State<MapScreen> {
                     showHazards: _showHazardOverlay,
                     hazardError: _riskError,
                     isLoadingHazards: _isLoadingHazards,
-                    onStartTrip: () => _calculateRoute(startTrip: true),
+                    tripStatus:
+                        _routeRisk?.tripId != null &&
+                            _routeRisk?.tripId == _trips.trip?.route.tripId
+                        ? (_trips.completed
+                              ? 'TRIP COMPLETED'
+                              : 'TRIP IN PROGRESS')
+                        : 'START TRIP',
+                    onStartTrip:
+                        _isCalculatingRoute ||
+                            (_routeRisk?.tripId != null &&
+                                _routeRisk?.tripId == _trips.trip?.route.tripId)
+                        ? null
+                        : () => _calculateRoute(startTrip: true),
                   ),
                 ),
               ),
@@ -1433,7 +1479,9 @@ class _RouteRiskSummaryCard extends StatelessWidget {
   final bool showHazards;
   final String? hazardError;
   final bool isLoadingHazards;
-  final VoidCallback onStartTrip;
+  final VoidCallback? onStartTrip;
+  final String tripStatus;
+  final bool liveEstimate;
 
   const _RouteRiskSummaryCard({
     required this.sourceName,
@@ -1448,6 +1496,8 @@ class _RouteRiskSummaryCard extends StatelessWidget {
     required this.hazardError,
     required this.isLoadingHazards,
     required this.onStartTrip,
+    required this.tripStatus,
+    required this.liveEstimate,
   });
 
   @override
@@ -1514,7 +1564,7 @@ class _RouteRiskSummaryCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${distanceKm.toStringAsFixed(1)} km  •  ${durationMin.toStringAsFixed(0)} mins drive',
+                      '${distanceKm.toStringAsFixed(1)} km${liveEstimate ? ' direct' : ''}  \u2022  ${durationMin.toStringAsFixed(0)} mins${liveEstimate ? ' estimated' : ' drive'}',
                       style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
@@ -1628,9 +1678,12 @@ class _RouteRiskSummaryCard extends StatelessWidget {
             child: ElevatedButton.icon(
               onPressed: onStartTrip,
               icon: const Icon(Icons.navigation_rounded, size: 20),
-              label: const Text(
-                'START TRIP',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+              label: Text(
+                tripStatus,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF087CF0),

@@ -30,6 +30,7 @@ if __package__:
     from .routers.admin import router as admin_router
     from .routers.profile import router as profile_router
     from .routers.trips import router as trips_router
+    from .routers.trip_stream import router as trip_stream_router
     from .routers.hazards import router as hazards_router
     from .schemas import (
         HazardReportRequest,
@@ -58,6 +59,7 @@ else:
     from routers.admin import router as admin_router
     from routers.profile import router as profile_router
     from routers.trips import router as trips_router
+    from routers.trip_stream import router as trip_stream_router
     from routers.hazards import router as hazards_router
     from schemas import (
         HazardReportRequest,
@@ -124,6 +126,7 @@ def create_app() -> FastAPI:
     app.include_router(profile_router)
     app.include_router(admin_router)
     app.include_router(trips_router)
+    app.include_router(trip_stream_router)
     app.include_router(hazards_router)
 
     login_attempts: dict[str, deque[float]] = {}
@@ -233,8 +236,10 @@ def create_app() -> FastAPI:
             raise HTTPException(401, "Account is inactive")
         return token_for(user)
 
+    @app.post("/api/v1/trips/start", response_model=RouteResponse, status_code=201, tags=["Trips"])
     @app.post("/api/v1/route/analyze", response_model=RouteResponse, tags=["Routes"])
     def analyze(
+        request: Request,
         body: RouteRequest,
         user: CurrentUser,
         db: DB,
@@ -253,7 +258,7 @@ def create_app() -> FastAPI:
             ),
         )
 
-        if not body.start_trip:
+        if not body.start_trip and request.url.path != "/api/v1/trips/start":
             return result
 
         # Serialize trip replacement for this tourist; keep assessment and trip atomic.
@@ -263,7 +268,7 @@ def create_app() -> FastAPI:
                 Trip.tourist_id == user.tourist_id, Trip.status == "active"
             )
         ):
-            previous.status = "completed"
+            previous.status = "cancelled"
             previous.ended_at = datetime.now(timezone.utc)
         trip = Trip(
             tourist_id=user.tourist_id,
@@ -276,6 +281,9 @@ def create_app() -> FastAPI:
             dest_lat=body.dest_lat,
             dest_lng=body.dest_lng,
             route_geometry=geometry.model_dump_json(),
+            last_latitude=body.initial_position.latitude if body.initial_position else None,
+            last_longitude=body.initial_position.longitude if body.initial_position else None,
+            last_location_updated_at=datetime.now(timezone.utc) if body.initial_position else None,
         )
         db.add(trip)
         db.flush()

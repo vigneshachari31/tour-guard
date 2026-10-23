@@ -12,11 +12,23 @@ class GeofenceHazard {
 
 class GeofenceUpdate {
   final List<GeofenceHazard> currentHazards, alerts;
-  const GeofenceUpdate(this.currentHazards, this.alerts);
+  final String status;
+  final double? distanceRemaining;
+  const GeofenceUpdate(
+    this.currentHazards,
+    this.alerts, {
+    this.status = "IN_PROGRESS",
+    this.distanceRemaining,
+  });
   factory GeofenceUpdate.fromJson(Map<String, dynamic> json) {
     List<GeofenceHazard> parse(String key) => (json[key] as List)
         .map((item) => GeofenceHazard.fromJson(item as Map<String, dynamic>))
         .toList();
-    return GeofenceUpdate(parse('current_hazards'), parse('alerts'));
+    return GeofenceUpdate(
+      parse('current_hazards'),
+      parse('alerts'),
+      status: json['status'] as String? ?? 'IN_PROGRESS',
+      distanceRemaining: (json['distance_remaining'] as num?)?.toDouble(),
+    );
   }
 }

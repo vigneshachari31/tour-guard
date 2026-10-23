@@ -146,13 +146,19 @@ export default function RescueMap({
           pathOptions={{ color: "#087CF0", weight: 4 }}
         />
       )}
-      {trip?.last_latitude != null && trip.last_longitude != null && (
+      {trip && <>
+        <CircleMarker center={[trip.origin_lat, trip.origin_lng]} radius={9} pathOptions={{color: '#087CF0', fillOpacity: 1}}><Popup>Source: {trip.source_name}</Popup></CircleMarker>
+        <Marker position={[trip.dest_lat, trip.dest_lng]} icon={L.divIcon({className: 'destination-flag', html: trip.status === 'completed' ? '<span style="color:green;font-size:30px">&#9873;</span>' : '<span style="color:red;font-size:30px">&#9873;</span>', iconSize: [32,32]})}>
+          <Popup>{trip.status === 'completed' ? 'Destination Reached' : 'Destination'}: {trip.destination_name}</Popup>
+        </Marker>
+      </>}
+      {trip?.status !== 'completed' && trip?.last_latitude != null && trip.last_longitude != null && (
         <CircleMarker
           center={[trip.last_latitude, trip.last_longitude]}
           radius={8}
           pathOptions={{ color: "#1EAA55", fillColor: "#1EAA55", fillOpacity: 0.9 }}
         >
-          <Popup>Last received GPS position</Popup>
+          <Popup>{trip.tourist_name || trip.tourist_id}: last received GPS position</Popup>
         </CircleMarker>
       )}
       {draw && onDraw && <Draw points={draw} onChange={onDraw} />}

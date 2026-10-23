@@ -23,6 +23,7 @@ class _TripHazardMonitorState extends State<TripHazardMonitor>
   late final TripMonitor _monitor;
   late final ActiveTripState _trips;
   bool _expanded = false;
+  int? _dismissedCompletion;
   @override
   void initState() {
     super.initState();
@@ -31,6 +32,7 @@ class _TripHazardMonitorState extends State<TripHazardMonitor>
     WidgetsBinding.instance.addObserver(this);
     _trips.addListener(_sync);
     _monitor.onPosition = _trips.updatePosition;
+    _monitor.onCompleted = _trips.markCompleted;
     _sync();
     if (widget.monitor == null) {
       HazardCatalog.instance.addListener(_hazardsChanged);
@@ -45,7 +47,8 @@ class _TripHazardMonitorState extends State<TripHazardMonitor>
     _monitor.reconcileHazards(catalog.activeIds);
   }
 
-  void _sync() => _monitor.setTrip(_trips.trip?.route.tripId);
+  void _sync() =>
+      _monitor.setTrip(_trips.completed ? null : _trips.trip?.route.tripId);
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final foreground = state == AppLifecycleState.resumed;
@@ -76,11 +79,35 @@ class _TripHazardMonitorState extends State<TripHazardMonitor>
   // banner its own overlay so tooltip buttons work outside individual routes.
   Widget build(BuildContext context) => Overlay.wrap(
     child: ListenableBuilder(
-      listenable: _monitor,
+      listenable: Listenable.merge([_monitor, _trips]),
       builder: (context, _) => Stack(
         fit: StackFit.expand,
         children: [
           Positioned.fill(child: widget.child),
+          if (_trips.completed &&
+              _dismissedCompletion != _trips.trip?.route.tripId)
+            Positioned.fill(
+              child: ColoredBox(
+                color: Colors.black54,
+                child: Center(
+                  child: AlertDialog(
+                    title: const Text('Trip Completed!'),
+                    content: const Text(
+                      'You have safely reached your destination.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => setState(
+                          () =>
+                              _dismissedCompletion = _trips.trip?.route.tripId,
+                        ),
+                        child: const Text('OK'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           if (_monitor.hazards.isNotEmpty || _monitor.error != null)
             Positioned(
               left: 16,

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../models/route_response.dart';
@@ -34,15 +35,25 @@ class ActiveTripState extends ChangeNotifier {
   LatLng? position;
   double? distanceToDestination;
   bool arrived = false;
-  int _nearbySamples = 0;
-  void updatePosition(LatLng point) {
-    if (_trip == null) return;
-    position = point;
-    distanceToDestination = const Distance()(point, _trip!.destination);
-    _nearbySamples = distanceToDestination! <= 50 ? _nearbySamples + 1 : 0;
-    arrived = _nearbySamples >= 2;
+  bool get completed => arrived;
+  void markCompleted() {
+    arrived = true;
+    distanceToDestination = 0;
     notifyListeners();
   }
+
+  void updatePosition(LatLng point) {
+    if (_trip == null || arrived) return;
+    position = point;
+    distanceToDestination = Geolocator.distanceBetween(
+      point.latitude,
+      point.longitude,
+      _trip!.destination.latitude,
+      _trip!.destination.longitude,
+    );
+    notifyListeners();
+  }
+
   ActiveTrip? get trip => _trip;
   int get revision => _revision;
   void start(ActiveTrip trip) {
@@ -50,13 +61,16 @@ class ActiveTripState extends ChangeNotifier {
     position = null;
     distanceToDestination = null;
     arrived = false;
-    _nearbySamples = 0;
+
     _revision++;
     notifyListeners();
   }
 
   void clear() {
     _trip = null;
+    position = null;
+    distanceToDestination = null;
+    arrived = false;
     _revision++;
     notifyListeners();
   }

@@ -72,6 +72,15 @@ export type Hazards = GeoJSON.FeatureCollection<
   HazardProperties
 >;
 export type Trip = {
+  tourist_name?: string | null;
+  lifecycle_status?: string;
+  origin_lat: number;
+  origin_lng: number;
+  dest_lat: number;
+  dest_lng: number;
+  distance_remaining?: number | null;
+  completed_at?: string | null;
+
   current_hazards?: { hazard_id: number; name: string; hazard_type: string; severity: number }[];
   recent_hazard_alerts?: { hazard_id: number; name: string; hazard_type: string; severity: number; detected_at: string }[];
   id: number;

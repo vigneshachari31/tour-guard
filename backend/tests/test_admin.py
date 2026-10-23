@@ -286,7 +286,7 @@ def test_trip_risk_history_and_location_ownership(client, monkeypatch):
     monkeypatch.setattr("backend.main.nearby_hazards", lambda *args: [])
     client.app.dependency_overrides[get_http] = lambda: None
     result = client.post(
-        "/api/v1/route/analyze",
+        "/api/v1/trips/start",
         headers=tourist,
         json={
             "origin_lat": 11.4,
@@ -297,7 +297,7 @@ def test_trip_risk_history_and_location_ownership(client, monkeypatch):
             "destination_name": "Test destination",
         },
     )
-    assert result.status_code == 200
+    assert result.status_code == 201
     identity = result.json()["trip_id"]
     trips = client.get("/api/v1/admin/trips", headers=admin).json()["items"]
     assert (
@@ -335,7 +335,7 @@ def test_trip_risk_history_and_location_ownership(client, monkeypatch):
     )
     assert (
         client.post(f"/api/v1/trips/{identity}/end", headers=tourist).json()["status"]
-        == "completed"
+        == "cancelled"
     )
     assert (
         client.post(

@@ -198,10 +198,20 @@ def charts(admin: Admin, db: DB):
 
 
 def trip_dict(db, trip):
+    try:
+        from ..tracking import tracking_fields
+    except ImportError:
+        from tracking import tracking_fields
+
     result = row(
         trip,
         "id tourist_id source_name destination_name origin_lat origin_lng dest_lat dest_lng status started_at ended_at last_latitude last_longitude last_location_updated_at",
     )
+    live = tracking_fields(trip)
+    result.update({k: v for k, v in live.items() if k != "status"})
+    result["lifecycle_status"] = live["status"]
+    user = db.scalar(select(User).where(User.tourist_id == trip.tourist_id))
+    result["tourist_name"] = user.full_name if user else None
     stamp = trip.last_location_updated_at
     if stamp and stamp.tzinfo is None:
         stamp = stamp.replace(tzinfo=timezone.utc)
@@ -660,11 +670,16 @@ def delete_hazard(identity: int, admin: Admin, db: DB):
     return Response(status_code=204)
 
 
+@router.get("/active-trips")
+def active_trips(admin: Admin, db: DB):
+    return {"items": [dict(trip_dict(db, t), status="IN_PROGRESS") for t in db.scalars(select(Trip).where(Trip.status == "active").order_by(Trip.id))]}
+
+
 @router.get("/trips")
 def trips(
     admin: Admin,
     db: DB,
-    status: Annotated[str | None, Query(pattern="^(active|completed)$")] = None,
+    status: Annotated[str | None, Query(pattern="^(active|completed|cancelled|planned)$")] = None,
     limit: Limit = 25,
     offset: Offset = 0,
 ):

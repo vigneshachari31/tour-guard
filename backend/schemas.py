@@ -57,7 +57,13 @@ class WeatherObservation(InputModel):
         return value
 
 
+class InitialPosition(InputModel):
+    latitude: Latitude
+    longitude: Longitude
+
+
 class RouteRequest(InputModel):
+    initial_position: InitialPosition | None = None
     start_trip: bool = False
     origin_lat: Latitude
     origin_lng: Longitude
@@ -247,6 +253,9 @@ class HazardEntry(GeofenceHazard):
 
 
 class TripLocationResponse(BaseModel):
+    status: str = "IN_PROGRESS"
+    distance_remaining: float | None = None
+    completed_at: datetime | None = None
     trip_id: int
     recorded_at: datetime
     current_hazards: list[GeofenceHazard]

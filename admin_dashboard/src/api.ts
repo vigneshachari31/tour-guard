@@ -38,3 +38,5 @@ export async function api<T>(
   }
   return body as T;
 }
+
+export function trackingToken() { return token; }

@@ -171,6 +171,8 @@ class Trip(Base):
         DateTime(timezone=True)
     )
     route_geometry: Mapped[str | None] = mapped_column(Text)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class LocationHistory(Base):

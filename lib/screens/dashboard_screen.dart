@@ -20,7 +20,8 @@ import 'sos_screen.dart';
 // ==============================================================================
 class DashboardScreen extends StatefulWidget {
   final ActiveTripState? tripState;
-  const DashboardScreen({super.key, this.tripState});
+  final ApiService? api;
+  const DashboardScreen({super.key, this.tripState, this.api});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -61,7 +62,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() => _endingTrip = true);
     try {
       if (trip?.route.tripId != null) {
-        await ApiService.instance.endTrip(trip!.route.tripId!);
+        await (widget.api ?? ApiService.instance).endTrip(trip!.route.tripId!);
       }
       if (identical(_trips.trip, trip)) _trips.clear();
     } catch (error) {

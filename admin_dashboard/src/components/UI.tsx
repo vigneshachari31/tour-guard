@@ -38,9 +38,11 @@ export function Table<T extends { id: number }>({
   rows,
   columns,
   loading = false,
+  onRowClick,
 }: {
   rows: T[];
   loading?: boolean;
+  onRowClick?: (row: T) => void;
   columns: { title: string; render: (row: T) => ReactNode }[];
 }) {
   return (
@@ -55,7 +57,7 @@ export function Table<T extends { id: number }>({
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.id}>
+            <tr key={row.id} onClick={() => onRowClick?.(row)} tabIndex={onRowClick ? 0 : undefined} onKeyDown={(e) => { if (e.key === "Enter") onRowClick?.(row); }}>
               {columns.map((c) => (
                 <td key={c.title}>{c.render(row)}</td>
               ))}

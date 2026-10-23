@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 
 import '../models/geofence_update.dart';
@@ -197,7 +197,7 @@ class ApiService {
     }
 
     return !kIsWeb && defaultTargetPlatform == TargetPlatform.android
-        ? 'http://10.0.2.2:8000/api/v1'
+        ? 'http://10.108.68.215:8000/api/v1'
         : 'http://127.0.0.1:8000/api/v1';
   }
 
@@ -301,9 +301,16 @@ class ApiService {
     String? originName,
     String? destinationName,
     bool startTrip = false,
+    double? initialLatitude,
+    double? initialLongitude,
   }) async {
-    final json = await _post('/route/analyze', {
+    final json = await _post(startTrip ? '/trips/start' : '/route/analyze', {
       'start_trip': startTrip,
+      if (initialLatitude != null && initialLongitude != null)
+        'initial_position': {
+          'latitude': initialLatitude,
+          'longitude': initialLongitude,
+        },
       'origin_lat': originLat,
       'origin_lng': originLng,
       'dest_lat': destLat,
@@ -319,6 +326,10 @@ class ApiService {
         'The server returned an invalid route assessment.',
       );
     }
+  }
+
+  Future<void> completeTrip(int id) async {
+    await _post('/trips/$id/complete', {}, method: 'PATCH');
   }
 
   Future<void> endTrip(int id) async {

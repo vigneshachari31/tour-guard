@@ -1,6 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:geolocator/geolocator.dart';
+
+import 'trip_socket.dart';
+
 import 'package:latlong2/latlong.dart';
 
 import '../models/geofence_update.dart';
@@ -10,6 +14,13 @@ import 'current_location.dart';
 /// Foreground monitoring only. Never uploads planned route coordinates as GPS.
 class TripMonitor extends ChangeNotifier {
   final ApiService api;
+  final bool useStreaming;
+  final bool useWebSocket;
+  final Stream<LatLng> Function()? positions;
+  StreamSubscription<LatLng>? _positions;
+  TripSocket? _socket;
+  LatLng? _pendingPosition;
+  VoidCallback? onCompleted;
   void Function(LatLng)? onPosition;
   final Future<LatLng> Function() locate;
   final Duration interval;
@@ -32,7 +43,10 @@ class TripMonitor extends ChangeNotifier {
     ApiService? api,
     Future<LatLng> Function()? locate,
     this.interval = const Duration(seconds: 10),
-  }) : api = api ?? ApiService.instance,
+    this.positions,
+    this.useWebSocket = true,
+  }) : useStreaming = locate == null || positions != null,
+       api = api ?? ApiService.instance,
        locate =
            locate ??
            (() async {
@@ -60,28 +74,77 @@ class TripMonitor extends ChangeNotifier {
 
   void _restart() {
     _timer?.cancel();
+    _positions?.cancel();
+    _positions = null;
+    _socket?.dispose();
+    _socket = null;
+    _pendingPosition = null;
     if (_tripId != null && _foreground && !_disposed) {
       _timer = Timer.periodic(interval, (_) => poll());
-      unawaited(poll());
+      unawaited(_startUpdates(_generation));
     }
   }
 
-  Future<void> poll() async {
+  Future<void> _startUpdates(int generation) async {
+    await poll(); // Requests permission and publishes the initial real observation.
+    if (!useStreaming ||
+        _disposed ||
+        !_foreground ||
+        generation != _generation ||
+        _tripId == null) {
+      return;
+    }
+    final stream =
+        positions?.call() ??
+        Geolocator.getPositionStream(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 5,
+          ),
+        ).map((p) => LatLng(p.latitude, p.longitude));
+    _positions = stream.listen(
+      (point) {
+        if (generation == _generation) unawaited(poll(point));
+      },
+      onError: (_) {
+        if (!_disposed && generation == _generation) {
+          error = 'GPS stream unavailable. Retrying location checks.';
+          notifyListeners();
+        }
+      },
+    );
+  }
+
+  Future<void> poll([LatLng? sample]) async {
     final id = _tripId, generation = _generation;
-    if (_busy || _disposed || !_foreground || id == null) return;
+    if (_disposed || !_foreground || id == null) return;
+    if (_busy) {
+      if (sample != null) _pendingPosition = sample;
+      return;
+    }
     _busy = true;
     notifyListeners();
     var locating = true;
     try {
-      final position = await locate();
+      final position = sample ?? await locate();
       if (_disposed || generation != _generation) return;
       locating = false;
       onPosition?.call(position);
-      final update = await api.recordTripLocation(
-        id,
-        position.latitude,
-        position.longitude,
-      );
+      GeofenceUpdate update;
+      try {
+        if (!useStreaming || !useWebSocket) throw StateError('HTTP transport');
+        _socket ??= TripSocket(api, id);
+        update = await _socket!.send(position.latitude, position.longitude);
+      } catch (_) {
+        _socket?.dispose();
+        _socket = null;
+        if (_disposed || generation != _generation) return;
+        update = await api.recordTripLocation(
+          id,
+          position.latitude,
+          position.longitude,
+        );
+      }
       if (_disposed || generation != _generation) return;
       hazards = update.currentHazards
           .where(
@@ -90,6 +153,10 @@ class TripMonitor extends ChangeNotifier {
           .toList();
       error = null;
       lastCheckedAt = DateTime.now();
+      if (update.status == "COMPLETED") {
+        setTrip(null);
+        onCompleted?.call();
+      }
     } catch (failure) {
       if (_disposed || generation != _generation) return;
       error = locating
@@ -103,7 +170,12 @@ class TripMonitor extends ChangeNotifier {
       // Retain the last warning while offline; do not report a false exit.
     } finally {
       _busy = false;
-      if (!_disposed && generation == _generation) notifyListeners();
+      if (!_disposed && generation == _generation) {
+        notifyListeners();
+        final pending = _pendingPosition;
+        _pendingPosition = null;
+        if (pending != null) unawaited(poll(pending));
+      }
     }
   }
 
@@ -112,6 +184,8 @@ class TripMonitor extends ChangeNotifier {
     _disposed = true;
     _generation++;
     _timer?.cancel();
+    _positions?.cancel();
+    _socket?.dispose();
     super.dispose();
   }
 }

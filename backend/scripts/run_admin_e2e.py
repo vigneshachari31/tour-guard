@@ -5,6 +5,7 @@ Usage: set TEST_DATABASE_URL, then python -m backend.scripts.run_admin_e2e.
 import os
 import secrets
 import subprocess
+import sys
 import threading
 import time
 import urllib.request
@@ -25,7 +26,7 @@ def main():
     from backend.auth import hash_password
     from backend.database import get_db
     from backend.main import create_app
-    from backend.models import SOSEvent, User, UserProfile
+    from backend.models import SOSEvent, Trip, User, UserProfile
 
     engine = create_engine(url, hide_parameters=True)
     with engine.connect() as connection:
@@ -70,6 +71,9 @@ def main():
             db.add(
                 SOSEvent(tourist_id=tourist.tourist_id, latitude=11.4, longitude=76.7)
             )
+            db.add(Trip(tourist_id=tourist.tourist_id, source_name="Tracking Source", destination_name="Tracking Destination",
+                        origin_lat=19.04, origin_lng=72.85, dest_lat=19.05, dest_lng=72.86,
+                        route_geometry='{"type":"LineString","coordinates":[[72.85,19.04],[72.855,19.045],[72.86,19.05]]}'))
             db.commit()
         server = uvicorn.Server(
             uvicorn.Config(app, host="127.0.0.1", port=8011, log_level="warning")
@@ -86,7 +90,7 @@ def main():
                 except OSError:
                     time.sleep(0.1)
             result = subprocess.run(
-                ["npm.cmd", "run", "test:e2e"],
+                ["npm.cmd", "run", "test:e2e", "--", *sys.argv[1:]],
                 check=False,
                 cwd=Path(__file__).resolve().parents[2] / "admin_dashboard",
             )

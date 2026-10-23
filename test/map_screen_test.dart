@@ -29,7 +29,7 @@ class BlankTiles extends TileProvider {
   ImageProvider getImage(TileCoordinates coordinates, TileLayer options) =>
       MemoryImage(
         base64Decode(
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=',
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=',
         ),
       );
 }
@@ -125,12 +125,16 @@ void main() {
         final api = ApiService(
           store: MemorySession(),
           client: MockClient((request) async {
+            if (request.url.path.endsWith('/end')) {
+              return http.Response('{"status":"cancelled"}', 200);
+            }
             sent = jsonDecode(request.body) as Map<String, dynamic>;
             if (fails) {
               return http.Response('{"detail":"Routing unavailable"}', 503);
             }
             return http.Response(
               jsonEncode({
+                'trip_id': request.url.path.endsWith('/start') ? 42 : null,
                 'geometry': {
                   'type': 'LineString',
                   'coordinates': [
@@ -183,7 +187,7 @@ void main() {
         );
         expect(find.byType(FlutterMap), findsOneWidget);
         expect(find.byType(TextField), findsNWidgets(2));
-        expect(find.byTooltip('Use Current Location'), findsOneWidget);
+        expect(find.byTooltip('Use current location'), findsOneWidget);
         expect(find.byType(PolylineLayer), findsNothing);
         await tester.enterText(find.byType(TextField).at(0), 'Ooty');
         await tester.pump(const Duration(milliseconds: 400));
@@ -196,6 +200,7 @@ void main() {
         await tester.tap(find.text('Pykara Destination'));
         await tester.pumpAndSettle();
         expect(sent, {
+          'start_trip': false,
           'origin_lat': 11.4102,
           'origin_lng': 76.695,
           'dest_lat': 11.45,
@@ -210,6 +215,11 @@ void main() {
           expect(find.byType(PolylineLayer), findsNothing);
           expect(find.text('SAFE'), findsNothing);
         } else {
+          expect(trips.trip, isNull); // Preview must not create a trip.
+          await tester.tap(find.text('START TRIP'));
+          await tester.pumpAndSettle();
+          expect(sent!['start_trip'], isTrue);
+          expect(find.text('TRIP IN PROGRESS'), findsOneWidget);
           final layer = tester.widget<PolylineLayer>(
             find.byType(PolylineLayer),
           );
@@ -250,7 +260,9 @@ void main() {
           expect(find.byType(PolylineLayer), findsOneWidget);
           await tester.pumpWidget(const SizedBox());
           await tester.pumpWidget(
-            MaterialApp(home: DashboardScreen(tripState: trips)),
+            MaterialApp(
+              home: DashboardScreen(tripState: trips, api: api),
+            ),
           );
           await tester.pumpAndSettle();
           expect(
@@ -267,6 +279,8 @@ void main() {
           await tester.ensureVisible(find.text('END TRIP'));
           await tester.tap(find.text('END TRIP'));
           await tester.pumpAndSettle();
+          await tester.tap(find.text('Finish trip'));
+          await tester.pumpAndSettle();
           expect(trips.trip, isNull);
           expect(fields[0].controller!.text, isEmpty);
           expect(find.text('HIGH RISK'), findsNothing);
@@ -276,7 +290,6 @@ void main() {
         api.close();
       },
     );
-
   }
   testWidgets(
     'Hazard polygons and markers render on map and toggle with overlay button',
@@ -308,7 +321,7 @@ void main() {
                 [76.67, 11.44],
                 [76.65, 11.44],
                 [76.65, 11.42],
-              ]
+              ],
             ],
           ),
           HazardSummary(
@@ -351,7 +364,9 @@ void main() {
 
       // Check polygon layer is present
       expect(find.byType(PolygonLayer), findsOneWidget);
-      final polygonLayer = tester.widget<PolygonLayer>(find.byType(PolygonLayer));
+      final polygonLayer = tester.widget<PolygonLayer>(
+        find.byType(PolygonLayer),
+      );
       expect(polygonLayer.polygons.length, 1);
       expect(polygonLayer.polygons.first.points.length, 5);
 
@@ -366,7 +381,9 @@ void main() {
 
       // Polygons should be hidden
       expect(find.byType(PolygonLayer), findsNothing);
-      final hiddenMarkers = tester.widget<MarkerLayer>(find.byType(MarkerLayer));
+      final hiddenMarkers = tester.widget<MarkerLayer>(
+        find.byType(MarkerLayer),
+      );
       expect(hiddenMarkers.markers.length, 2); // only origin & destination pins
 
       api.close();
