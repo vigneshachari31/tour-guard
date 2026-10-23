@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 // ==============================================================================
 // 🏷️ DASHBOARD HEADER WIDGET
-// Displays the App Title, Subtitle, and Notification Bell icon.
+// Displays the App Title and Subtitle.
 // ==============================================================================
 class DashboardHeader extends StatelessWidget {
   const DashboardHeader({super.key});
@@ -46,17 +46,6 @@ class DashboardHeader extends StatelessWidget {
             ),
           ],
         )),
-        IconButton(
-          tooltip: 'Notifications',
-          onPressed: () {
-            // TODO: Open Notifications / Advisories drawer
-          },
-          icon: const Icon(
-            Icons.notifications_none_rounded,
-            size: 28,
-            color: Color(0xFF1A2D4F),
-          ),
-        ),
       ],
       ),
     );

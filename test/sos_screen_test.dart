@@ -16,12 +16,12 @@ void main() {
       await tester.pump(const Duration(seconds: 7));
 
       // Verify Screen Header and Beacon
-      expect(find.text('SMART RESCUE COMMAND'), findsOneWidget);
+      expect(find.text('Smart rescue'), findsOneWidget);
       expect(find.text('SOS'), findsOneWidget);
 
       // Verify Telemetry and Medical Card Headers
-      expect(find.text('LIVE RESCUE TELEMETRY'), findsOneWidget);
-      expect(find.text('TOURIST EMERGENCY CONTEXT'), findsOneWidget);
+      expect(find.text('YOUR LIVE LOCATION'), findsOneWidget);
+      expect(find.text('YOUR EMERGENCY DETAILS'), findsOneWidget);
 
       // Verify Official Helplines
       expect(find.text('112'), findsOneWidget);

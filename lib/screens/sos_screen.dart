@@ -52,18 +52,30 @@ class _SosScreenState extends State<SosScreen>
       setState(() {
         _isSosDispatched = active;
         _responderStage = stage;
-        _sosStatusMessage = 'SOS #${event['id']}: ${switch (status) {
-          'OPEN' => responder != null ? 'Responder assigned. Awaiting acceptance.' : 'Received. Waiting for assignment.',
-          'IN_PROGRESS' => stage == 'ARRIVED' ? 'Responder arrival confirmed.' : stage == 'DEPARTED' ? 'Responder departure confirmed.' : 'Response started by the rescue desk.',
-          'RESOLVED' => 'Resolved by the rescue desk.',
-          'CANCELLED' => 'Cancelled.',
-          _ => 'Status unavailable.',
-        }}${responder == null ? '' : '\nResponder: ${responder['name']} • ${responder['phone']}\nProgress: $stage (recorded by rescue desk)'}';
+        _sosStatusMessage =
+            'SOS #${event['id']}: ${switch (status) {
+              'OPEN' => responder != null ? 'Responder assigned. Awaiting acceptance.' : 'Received. Waiting for assignment.',
+              'IN_PROGRESS' => stage == 'ARRIVED'
+                  ? 'Responder arrival confirmed.'
+                  : stage == 'DEPARTED'
+                  ? 'Responder departure confirmed.'
+                  : 'Response started by the rescue desk.',
+              'RESOLVED' => 'Resolved by the rescue desk.',
+              'CANCELLED' => 'Cancelled.',
+              _ => 'Status unavailable.',
+            }}${responder == null ? '' : '\nResponder: ${responder['name']} • ${responder['phone']}\nProgress: $stage (recorded by rescue desk)'}';
       });
     } catch (_) {
-      if (mounted && _isSosDispatched) setState(() => _sosStatusMessage = 'Status updates unavailable. Retrying; your SOS may still be active.');
-    } finally { _checkingStatus = false; }
+      if (mounted && _isSosDispatched) {
+        setState(
+          () => _sosStatusMessage = 'Status updates unavailable. Retrying; your SOS may still be active.',
+        );
+      }
+    } finally {
+      _checkingStatus = false;
+    }
   }
+
   int _countdownSeconds = 3;
   bool _isCountingDown = false;
   bool _isSosDispatched = false;
@@ -103,7 +115,10 @@ class _SosScreenState extends State<SosScreen>
 
     _loadTouristProfile();
     _refreshStatus();
-    _statusTimer = Timer.periodic(const Duration(seconds: 10), (_) => _refreshStatus());
+    _statusTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => _refreshStatus(),
+    );
     _fetchLiveTelemetry();
   }
 
@@ -244,19 +259,35 @@ class _SosScreenState extends State<SosScreen>
   // ─── 5. RESET RESCUE STATE ──────────────────────────────────────────────────
   Future<void> _resetSosState() async {
     if (_incidentId != null && _isSosDispatched) {
-      final confirm = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
-        title: const Text('Cancel this SOS?'),
-        content: const Text('The rescue desk will see that you cancelled your request.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep SOS active')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Cancel SOS')),
-        ],
-      ));
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Cancel this SOS?'),
+          content: const Text(
+            'The rescue desk will see that you cancelled your request.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Keep SOS active'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Cancel SOS'),
+            ),
+          ],
+        ),
+      );
       if (confirm != true) return;
       try {
         await ApiService.instance.cancelSos(_incidentId!);
       } catch (_) {
-        if (mounted) _showSosMessage('Cancellation not confirmed. Refresh status and retry.', isError: true);
+        if (mounted) {
+          _showSosMessage(
+            'Cancellation not confirmed. Refresh status and retry.',
+            isError: true,
+          );
+        }
         return;
       }
       if (!mounted) return;
@@ -274,7 +305,7 @@ class _SosScreenState extends State<SosScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(
-        0xFF0F172A,
+        0xFF081526,
       ), // High-contrast Emergency Dark Slate
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -284,26 +315,86 @@ class _SosScreenState extends State<SosScreen>
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          'SMART RESCUE COMMAND',
+          'Smart rescue',
           style: TextStyle(
             color: Colors.white,
-            fontSize: 16,
+            fontSize: 21,
             fontWeight: FontWeight.w800,
-            letterSpacing: 1.0,
+            letterSpacing: -0.4,
           ),
         ),
         centerTitle: true,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          padding: EdgeInsets.symmetric(
+            horizontal: MediaQuery.sizeOf(context).width > 760
+                ? (MediaQuery.sizeOf(context).width - 700) / 2
+                : 20,
+            vertical: 16,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'TOUR GUARD / EMERGENCY ASSISTANCE',
+                  style: TextStyle(
+                    color: Color(0xFF91AECF),
+                    fontSize: 10,
+                    letterSpacing: 1.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
               if (_sosStatusMessage != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: Text(_sosStatusMessage!, style: const TextStyle(color: Colors.white, fontSize: 16)),
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 18),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF183956), Color(0xFF11283F)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: const Color(0xFF2A4D6B)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(
+                            Icons.support_agent_rounded,
+                            color: Color(0xFF7DD3FC),
+                            size: 22,
+                          ),
+                          SizedBox(width: 10),
+                          Text(
+                            'Rescue desk update',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        _sosStatusMessage!,
+                        style: const TextStyle(
+                          color: Color(0xFFCEE0F2),
+                          fontSize: 13,
+                          height: 1.6,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               // ─── Top Live Beacon Status Banner ──────────────────────────────
               Container(
@@ -314,9 +405,9 @@ class _SosScreenState extends State<SosScreen>
                 ),
                 decoration: BoxDecoration(
                   color: _isSosDispatched
-                      ? const Color(0xFFDC2626).withValues(alpha: 0.25)
+                      ? const Color(0xFFDC2626).withValues(alpha: 0.12)
                       : const Color(0xFF1E293B),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(30),
                   border: Border.all(
                     color: _isSosDispatched
                         ? const Color(0xFFDC2626)
@@ -395,7 +486,10 @@ class _SosScreenState extends State<SosScreen>
                       height: 175,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: const Color(0xFFDC2626).withValues(alpha: 0.35),
+                        color: const Color(0xFFDC2626).withValues(alpha: 0.12),
+                        border: Border.all(
+                          color: const Color(0xFFEF4444).withValues(alpha: .35),
+                        ),
                       ),
                     ),
 
@@ -405,6 +499,10 @@ class _SosScreenState extends State<SosScreen>
                       height: 140,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: .2),
+                          width: 2,
+                        ),
                         gradient: LinearGradient(
                           colors: _isSosDispatched
                               ? [
@@ -533,16 +631,28 @@ class _SosScreenState extends State<SosScreen>
 
               if (_isSosDispatched) ...[
                 const SizedBox(height: 12),
-                TextButton.icon(
-                  onPressed: _resetSosState,
-                  icon: const Icon(
-                    Icons.cancel_outlined,
-                    size: 16,
-                    color: Color(0xFF94A3B8),
-                  ),
-                  label: const Text(
-                    'Cancel Active SOS Distress Mode',
-                    style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+                SizedBox(
+                  width: double.infinity,
+                  height: 54,
+                  child: OutlinedButton.icon(
+                    onPressed: _resetSosState,
+                    icon: const Icon(Icons.cancel_outlined, size: 22),
+                    label: const Text('Cancel Active SOS'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      backgroundColor: const Color(0xFF44202B),
+                      side: const BorderSide(
+                        color: Color(0xFFFB7185),
+                        width: 1.5,
+                      ),
+                      textStyle: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -553,9 +663,13 @@ class _SosScreenState extends State<SosScreen>
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFF334155)),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF152B42), Color(0xFF102236)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: const Color(0xFF243F59)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -569,7 +683,7 @@ class _SosScreenState extends State<SosScreen>
                         ),
                         SizedBox(width: 8),
                         Text(
-                          'LIVE RESCUE TELEMETRY',
+                          'YOUR LIVE LOCATION',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w800,
@@ -615,9 +729,13 @@ class _SosScreenState extends State<SosScreen>
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFF334155)),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF152B42), Color(0xFF102236)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: const Color(0xFF243F59)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -631,7 +749,7 @@ class _SosScreenState extends State<SosScreen>
                         ),
                         SizedBox(width: 8),
                         Text(
-                          'TOURIST EMERGENCY CONTEXT',
+                          'YOUR EMERGENCY DETAILS',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w800,
@@ -771,7 +889,7 @@ class _TelemetryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -826,13 +944,20 @@ class _HelplineCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
         decoration: BoxDecoration(
-          color: const Color(0xFF1E293B),
-          borderRadius: BorderRadius.circular(16),
+          color: color.withValues(alpha: .09),
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(color: color.withValues(alpha: 0.3)),
         ),
         child: Column(
           children: [
-            Icon(icon, size: 22, color: color),
+            Container(
+              padding: const EdgeInsets.all(9),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: .12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 22, color: color),
+            ),
             const SizedBox(height: 6),
             Text(
               number,

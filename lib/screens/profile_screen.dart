@@ -203,7 +203,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             )
           : SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(18, 20, 18, 28),
+              padding: EdgeInsets.fromLTRB(
+                MediaQuery.sizeOf(context).width > 760
+                    ? (MediaQuery.sizeOf(context).width - 700) / 2
+                    : 20,
+                20,
+                MediaQuery.sizeOf(context).width > 760
+                    ? (MediaQuery.sizeOf(context).width - 700) / 2
+                    : 20,
+                32,
+              ),
               child: Form(
                 key: _formKey,
                 child: Column(
@@ -213,11 +222,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text(
-                          'MY PROFILE',
+                          'My profile',
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 25,
                             fontWeight: FontWeight.w800,
-                            letterSpacing: 1,
+                            letterSpacing: -0.6,
                             color: Color(0xFF1A2D4F),
                           ),
                         ),
@@ -251,15 +260,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const SizedBox(height: 16),
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 28,
+                      ),
                       decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(24),
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFF142C50), Color(0xFF145EA8)],
+                        ),
+                        borderRadius: BorderRadius.circular(28),
                         boxShadow: const [
                           BoxShadow(
-                            color: Color(0x0A0E4E91),
-                            blurRadius: 18,
-                            offset: Offset(0, 5),
+                            color: Color(0x24145EA8),
+                            blurRadius: 24,
+                            offset: Offset(0, 10),
                           ),
                         ],
                       ),
@@ -267,47 +283,58 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         children: [
                           Stack(
                             children: [
-                              InkWell(
-                                onTap: _isUploading || _isSaving
-                                    ? null
-                                    : _uploadPhoto,
-                                child: ClipOval(
-                                  child: SizedBox(
-                                    width: 76,
-                                    height: 76,
-                                    child: _isUploading
-                                        ? const Center(
-                                            child: CircularProgressIndicator(),
-                                          )
-                                        : _avatar != null
-                                        ? Image.memory(
-                                            _avatar!,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (_, _, _) =>
-                                                const Icon(
-                                                  Icons.person,
-                                                  size: 40,
+                              Container(
+                                padding: const EdgeInsets.all(5),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: .4),
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: InkWell(
+                                  onTap: _isUploading || _isSaving
+                                      ? null
+                                      : _uploadPhoto,
+                                  child: ClipOval(
+                                    child: SizedBox(
+                                      width: 76,
+                                      height: 76,
+                                      child: _isUploading
+                                          ? const Center(
+                                              child:
+                                                  CircularProgressIndicator(),
+                                            )
+                                          : _avatar != null
+                                          ? Image.memory(
+                                              _avatar!,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (_, _, _) =>
+                                                  const Icon(
+                                                    Icons.person,
+                                                    size: 40,
+                                                  ),
+                                            )
+                                          : CircleAvatar(
+                                              radius: 38,
+                                              backgroundColor: const Color(
+                                                0xFFE8F3FF,
+                                              ),
+                                              child: Text(
+                                                _nameController.text
+                                                        .trim()
+                                                        .isEmpty
+                                                    ? '?'
+                                                    : _nameController.text
+                                                          .trim()[0]
+                                                          .toUpperCase(),
+                                                style: const TextStyle(
+                                                  fontSize: 30,
+                                                  color: Color(0xFF087CF0),
                                                 ),
-                                          )
-                                        : CircleAvatar(
-                                            radius: 38,
-                                            backgroundColor: const Color(
-                                              0xFFE8F3FF,
-                                            ),
-                                            child: Text(
-                                              _nameController.text
-                                                      .trim()
-                                                      .isEmpty
-                                                  ? '?'
-                                                  : _nameController.text
-                                                        .trim()[0]
-                                                        .toUpperCase(),
-                                              style: const TextStyle(
-                                                fontSize: 30,
-                                                color: Color(0xFF087CF0),
                                               ),
                                             ),
-                                          ),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -316,12 +343,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 bottom: 0,
                                 child: IconButton(
                                   tooltip: 'Edit profile photo',
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: const Color(0xFF087CF0),
+                                    minimumSize: const Size(32, 32),
+                                    padding: const EdgeInsets.all(7),
+                                    side: const BorderSide(
+                                      color: Colors.white,
+                                      width: 2,
+                                    ),
+                                  ),
                                   onPressed: _isUploading || _isSaving
                                       ? null
                                       : _uploadPhoto,
                                   icon: const Icon(
-                                    Icons.edit,
-                                    color: Color(0xFF087CF0),
+                                    Icons.camera_alt_outlined,
+                                    size: 17,
+                                    color: Colors.white,
                                   ),
                                 ),
                               ),
@@ -333,9 +370,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ? 'Add your name'
                                 : _nameController.text.trim(),
                             style: const TextStyle(
-                              fontSize: 18,
+                              fontSize: 24,
                               fontWeight: FontWeight.w800,
-                              color: Color(0xFF1A2D4F),
+                              color: Colors.white,
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -343,7 +380,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             'Tourist safety profile',
                             style: TextStyle(
                               fontSize: 13,
-                              color: Color(0xFF8A99AF),
+                              color: Color(0xFFC2DCF5),
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: .1),
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.shield_outlined,
+                                  size: 16,
+                                  color: Color(0xFF9DD9FF),
+                                ),
+                                SizedBox(width: 7),
+                                Text(
+                                  'TOUR GUARD TRAVELER',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    letterSpacing: 1.4,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFFE0F0FF),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -447,15 +515,56 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _sectionTitle(String text) => Text(
-    text,
-    style: const TextStyle(
-      fontSize: 12,
-      fontWeight: FontWeight.w800,
-      letterSpacing: 0.8,
-      color: Color(0xFF53647F),
-    ),
-  );
+  Widget _sectionTitle(String text) {
+    final emergency = text == 'EMERGENCY INFORMATION';
+    final color = emergency ? const Color(0xFFB45345) : const Color(0xFF145EA8);
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 6),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(9),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: .09),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              emergency
+                  ? Icons.health_and_safety_outlined
+                  : Icons.badge_outlined,
+              size: 20,
+              color: color,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  emergency ? 'Emergency information' : 'Personal details',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1A2D4F),
+                  ),
+                ),
+                Text(
+                  emergency
+                      ? 'Details that help responders assist you'
+                      : 'Your details, wherever you travel',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF718198),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _textField({
     required TextEditingController controller,
@@ -479,18 +588,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
         inputFormatters: inputFormatters,
         validator: validator,
         onChanged: onChanged,
+        style: const TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w500,
+          color: Color(0xFF1A2D4F),
+        ),
         decoration: InputDecoration(
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 18,
+            vertical: 20,
+          ),
+          floatingLabelBehavior: FloatingLabelBehavior.always,
+          labelStyle: const TextStyle(color: Color(0xFF718198), fontSize: 13),
           labelText: label,
           hintText: hintText,
           prefixIcon: Icon(
             icon,
             color: _isEditing
                 ? const Color(0xFF087CF0)
-                : const Color(0xFF8A99AF),
+                : const Color(0xFF587DA5),
             size: 20,
           ),
           filled: true,
-          fillColor: _isEditing ? Colors.white : const Color(0xFFF8FAFC),
+          fillColor: Colors.white,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
             borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
@@ -500,7 +620,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             borderSide: BorderSide(
               color: _isEditing
                   ? const Color(0xFFE2E8F0)
-                  : const Color(0xFFF1F5F9),
+                  : const Color(0xFFE5ECF4),
             ),
           ),
           focusedBorder: OutlineInputBorder(
