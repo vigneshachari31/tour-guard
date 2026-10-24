@@ -795,7 +795,10 @@ class _MapScreenState extends State<MapScreen>
   }
 
   // Display and assess the same route returned by FastAPI.
-  Future<void> _calculateRoute({bool startTrip = false, bool safer = false}) async {
+  Future<void> _calculateRoute({
+    bool startTrip = false,
+    bool safer = false,
+  }) async {
     // Resolve the default current-location source instead of silently doing nothing.
     if (_sourceLocation == null &&
         _destinationLocation != null &&
@@ -1104,7 +1107,7 @@ class _MapScreenState extends State<MapScreen>
                 markers: [
                   ..._buildHazardMarkers(),
                   // LIVE USER GPS / SOURCE MARKER
-                  if (_sourceLocation != null)
+                  if (_sourceLocation != null && _userGpsLocation == null)
                     Marker(
                       point: _sourceLocation!,
                       width: 54,
@@ -1138,7 +1141,7 @@ class _MapScreenState extends State<MapScreen>
                             ),
                             child: const Center(
                               child: Icon(
-                                Icons.navigation_rounded,
+                                Icons.trip_origin,
                                 color: Colors.white,
                                 size: 16,
                               ),
@@ -1585,13 +1588,19 @@ class _MapScreenState extends State<MapScreen>
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: FilledButton.icon(
-                  onPressed: _isCalculatingRoute ? null : () => _calculateRoute(safer: !_preferSafer),
-                  icon: Icon(_preferSafer ? Icons.compare_arrows : Icons.alt_route),
-                  label: Text(_preferSafer
-                      ? (_routeRisk?.hasDistinctOriginal ?? false)
-                          ? 'Blue: selected / Grey: original · Show original'
-                          : 'No different lower-hazard route found · Show original'
-                      : 'Find safer route'),
+                  onPressed: _isCalculatingRoute
+                      ? null
+                      : () => _calculateRoute(safer: !_preferSafer),
+                  icon: Icon(
+                    _preferSafer ? Icons.compare_arrows : Icons.alt_route,
+                  ),
+                  label: Text(
+                    _preferSafer
+                        ? (_routeRisk?.hasDistinctOriginal ?? false)
+                              ? 'Blue: selected / Grey: original · Show original'
+                              : 'No different lower-hazard route found · Show original'
+                        : 'Find safer route',
+                  ),
                 ),
               ),
             ),
@@ -1817,7 +1826,10 @@ class _RouteRiskSummaryCard extends StatelessWidget {
                         builder: (context) => AlertDialog(
                           title: const Text('Your journey at a glance'),
                           content: SingleChildScrollView(
-                            child: SizedBox(width: 440, child: RouteSafetyDetails(route: risk!)),
+                            child: SizedBox(
+                              width: 440,
+                              child: RouteSafetyDetails(route: risk!),
+                            ),
                           ),
                           actions: [
                             TextButton(

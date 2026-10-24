@@ -5,6 +5,7 @@ import {
   GeoJSON,
   CircleMarker,
   Popup,
+  Tooltip,
   Polyline,
   Polygon,
   Marker,
@@ -17,6 +18,13 @@ import { Link } from "react-router-dom";
 import "leaflet/dist/leaflet.css";
 
 type Point = [number, number];
+
+const tripIcons = {
+  start: L.divIcon({className: 'trip-map-marker', html: '<span class="trip-pin trip-pin-start">A</span>', iconSize: [34,34], iconAnchor: [17,17]}),
+  destination: L.divIcon({className: 'trip-map-marker', html: '<span class="trip-pin trip-pin-destination">B</span>', iconSize: [34,34], iconAnchor: [17,17]}),
+  completed: L.divIcon({className: 'trip-map-marker', html: '<span class="trip-pin trip-pin-completed">&#10003;</span>', iconSize: [34,34], iconAnchor: [17,17]}),
+  tourist: L.divIcon({className: 'trip-map-marker', html: '<span class="trip-pin trip-pin-tourist"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3"/><path d="M5 21v-3a7 7 0 0 1 14 0v3"/></svg></span>', iconSize: [38,38], iconAnchor: [19,19]}),
+};
 
 function Fit({ points }: { points: Point[] }) {
   const map = useMap();
@@ -95,6 +103,12 @@ export default function RescueMap({
   });
 
   return (
+    <div className="trip-map-frame">
+    {trip && <div className="trip-map-legend" aria-label="Map legend">
+      <span><b className="legend-start">A</b> Start</span>
+      <span><b className={trip.status === 'completed' ? 'legend-completed' : 'legend-destination'}>{trip.status === 'completed' ? '✓' : 'B'}</b> {trip.status === 'completed' ? 'Arrived' : 'Destination'}</span>
+      <span><b className="legend-tourist">•</b> Tourist GPS</span>
+    </div>}
     <MapContainer
       center={[20.59, 78.96]}
       zoom={5}
@@ -143,26 +157,28 @@ export default function RescueMap({
       {route.length > 0 && (
         <Polyline
           positions={route}
-          pathOptions={{ color: "#087CF0", weight: 4 }}
+          pathOptions={{ color: "#087CF0", weight: 5, opacity: .85, lineCap: 'round' }}
         />
       )}
       {trip && <>
-        <CircleMarker center={[trip.origin_lat, trip.origin_lng]} radius={9} pathOptions={{color: '#087CF0', fillOpacity: 1}}><Popup>Source: {trip.source_name}</Popup></CircleMarker>
-        <Marker position={[trip.dest_lat, trip.dest_lng]} icon={L.divIcon({className: 'destination-flag', html: trip.status === 'completed' ? '<span style="color:green;font-size:30px">&#9873;</span>' : '<span style="color:red;font-size:30px">&#9873;</span>', iconSize: [32,32]})}>
-          <Popup>{trip.status === 'completed' ? 'Destination Reached' : 'Destination'}: {trip.destination_name}</Popup>
+        <Marker position={[trip.origin_lat, trip.origin_lng]} icon={tripIcons.start} title="Trip start">
+          <Tooltip>Start: {trip.source_name}</Tooltip>
+          <Popup><strong>Trip start</strong><p>{trip.source_name}</p></Popup>
+        </Marker>
+        <Marker position={[trip.dest_lat, trip.dest_lng]} icon={trip.status === 'completed' ? tripIcons.completed : tripIcons.destination} title={trip.status === 'completed' ? 'Destination reached' : 'Destination'}>
+          <Tooltip>{trip.status === 'completed' ? 'Arrived: ' : 'Destination: '}{trip.destination_name}</Tooltip>
+          <Popup><strong>{trip.status === 'completed' ? 'Destination Reached' : 'Destination'}</strong><p>{trip.destination_name}</p></Popup>
         </Marker>
       </>}
       {trip?.status !== 'completed' && trip?.last_latitude != null && trip.last_longitude != null && (
-        <CircleMarker
-          center={[trip.last_latitude, trip.last_longitude]}
-          radius={8}
-          pathOptions={{ color: "#1EAA55", fillColor: "#1EAA55", fillOpacity: 0.9 }}
-        >
-          <Popup>{trip.tourist_name || trip.tourist_id}: last received GPS position</Popup>
-        </CircleMarker>
+        <Marker position={[trip.last_latitude, trip.last_longitude]} icon={tripIcons.tourist} zIndexOffset={1000} title="Tourist GPS position">
+          <Tooltip>{trip.tourist_name || trip.tourist_id}: last received GPS</Tooltip>
+          <Popup><strong>{trip.tourist_name || trip.tourist_id}</strong><p>Last received GPS position</p></Popup>
+        </Marker>
       )}
       {draw && onDraw && <Draw points={draw} onChange={onDraw} />}
       <Fit points={points.length ? points : hazardPoints} />
     </MapContainer>
+    </div>
   );
 }

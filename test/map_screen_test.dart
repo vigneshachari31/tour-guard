@@ -372,7 +372,7 @@ void main() {
           expect(find.text('HIGH RISK'), findsOneWidget);
           expect(find.textContaining('Test slope'), findsOneWidget);
           final markers = tester.widget<MarkerLayer>(find.byType(MarkerLayer));
-          expect(markers.markers.length, 3);
+          expect(markers.markers.length, 2); // Destination and live tourist only.
           await tester.enterText(
             find.byType(TextField).at(0),
             'Changed source',

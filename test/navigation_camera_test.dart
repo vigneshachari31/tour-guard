@@ -76,6 +76,10 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(map.camera.center.latitude, closeTo(19.001, 0.00001));
+      expect(
+        tester.widget<MarkerLayer>(find.byType(MarkerLayer)).markers,
+        hasLength(2),
+      );
       final arrow = tester.widget<Transform>(
         find.byKey(const ValueKey('live-heading-arrow')),
       );
