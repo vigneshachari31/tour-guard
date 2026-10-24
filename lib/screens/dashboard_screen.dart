@@ -821,6 +821,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
         child: NavigationBar(
+          height: 72,
+          labelTextStyle: const WidgetStatePropertyAll(TextStyle(
+            fontSize: 11, fontWeight: FontWeight.w600,
+          )),
           selectedIndex: _currentTabIndex,
           onDestinationSelected: (int index) {
             if (index == 1) {
@@ -855,7 +859,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Icons.emergency_rounded,
                 color: Color(0xFFDC2626),
               ),
-              label: 'SOS Rescue',
+              label: 'SOS',
             ),
             NavigationDestination(
               icon: Icon(Icons.notifications_none_rounded),

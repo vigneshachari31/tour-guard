@@ -115,6 +115,7 @@ def token_for(user: User) -> TokenResponse:
 
 
 def create_app() -> FastAPI:
+    from backend.routers.sessions import router as sessions_router
     settings = get_settings()
     app = FastAPI(title="Tour Guard API", version="2.0.0", lifespan=lifespan)
     app.add_middleware(
@@ -130,6 +131,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(profile_router)
+    app.include_router(sessions_router)
     app.include_router(admin_router)
     app.include_router(trips_router)
     app.include_router(trip_stream_router)
@@ -220,7 +222,8 @@ def create_app() -> FastAPI:
             try:
                 db.commit()
                 db.refresh(user)
-                return token_for(user)
+                from backend.routers.sessions import issue_session
+                return issue_session(user, db)
             except IntegrityError:
                 db.rollback()
                 if (
@@ -243,7 +246,8 @@ def create_app() -> FastAPI:
         assert user is not None
         if not user.is_active:
             raise HTTPException(401, "Account is inactive")
-        return token_for(user)
+        from backend.routers.sessions import issue_session
+        return issue_session(user, db)
 
     @app.post("/api/v1/trips/start", response_model=RouteResponse, status_code=201, tags=["Trips"])
     @app.post("/api/v1/route/analyze", response_model=RouteResponse, tags=["Routes"])

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
-import 'login_screen.dart';
+import '../services/api_service.dart';
 
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
+  final ApiService? api;
+  const SplashScreen({super.key, this.api});
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -14,6 +15,17 @@ class _SplashScreenState extends State<SplashScreen>
   late final AnimationController _animationController;
   late final Animation<double> _fadeAnimation;
   late final Animation<Offset> _logoSlideAnimation;
+  String? _storageError;
+
+  Future<void> _restoreSession() async {
+    try {
+      final session = await (widget.api ?? ApiService.instance).getSession();
+      if (!mounted) return;
+      Navigator.of(context).pushReplacementNamed(session == null ? '/login' : '/dashboard');
+    } catch (_) {
+      if (mounted) setState(() => _storageError = 'Could not read your saved login. Please retry.');
+    }
+  }
 
   @override
   void initState() {
@@ -35,21 +47,7 @@ class _SplashScreenState extends State<SplashScreen>
     Future.delayed(const Duration(milliseconds: 2400), () {
       if (!mounted) return;
 
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) =>
-              const LoginScreen(),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) =>
-              FadeTransition(
-                opacity: CurvedAnimation(
-                  parent: animation,
-                  curve: Curves.easeInOut,
-                ),
-                child: child,
-              ),
-          transitionDuration: const Duration(milliseconds: 1200),
-        ),
-      );
+      _restoreSession();
     });
   }
 
@@ -64,7 +62,10 @@ class _SplashScreenState extends State<SplashScreen>
     return Scaffold(
       backgroundColor: Colors.white,
       body: Center(
-        child: SlideTransition(
+        child: _storageError != null ? Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(_storageError!),
+          TextButton(onPressed: _restoreSession, child: const Text('Retry')),
+        ]) : SlideTransition(
           position: _logoSlideAnimation,
           child: FadeTransition(
             opacity: _fadeAnimation,

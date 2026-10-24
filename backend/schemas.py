@@ -36,6 +36,7 @@ class RegisterRequest(LoginRequest):
 
 
 class TokenResponse(BaseModel):
+    refresh_token: str | None = None
     access_token: str
     token_type: Literal["bearer"] = "bearer"
     expires_in: int

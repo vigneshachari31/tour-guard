@@ -53,6 +53,8 @@ void main() {
     (100, 'HIGH', Colors.red),
   ]) {
     testWidgets('Radar renders ${entry.$2} score and factors', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(320, 850));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       final api = ApiService(
         store: MemorySession(),
         client: MockClient((request) async {
@@ -66,6 +68,9 @@ void main() {
               'risk_level': entry.$2,
               'factors': ['Nearby reports'],
               'checked_at': '2026-10-23',
+              'weather': {'temperature_c': 27.3, 'wind_kmh': 4.5,
+                'rainfall_mm_h': 0.0, 'at': '2026-10-24T02:00:00Z',
+                'source': 'Open-Meteo hourly forecast'},
             }),
             200,
           );
@@ -104,6 +109,10 @@ void main() {
       );
       expect(gauge.color, entry.$3);
       expect(gauge.value, entry.$1 / 100);
+      await tester.scrollUntilVisible(find.text('Local weather'), 150);
+      await tester.pumpAndSettle();
+      expect(find.text('27.3 °C'), findsOneWidget);
+      expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       api.close();
     });

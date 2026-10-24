@@ -5,6 +5,7 @@ Secrets stay in local backend/.env; backup stays outside the repository.
 """
 import hashlib
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -25,6 +26,13 @@ BIN = Path('C:/Program Files/PostgreSQL/18/bin')
 def run(args, env, data=None):
     result = subprocess.run(args, env=env, input=data, capture_output=True, timeout=240)
     if result.returncode:
+        for line in result.stderr.decode(errors='replace').splitlines():
+            check = re.search(r'Migration verification failed: ([a-z_]+)', line)
+            if check:
+                print('Verification mismatch in table:', check.group(1), flush=True)
+            match = re.search(r'ERROR:  ([A-Z0-9]{5})', line)
+            if match:
+                print('Database error SQLSTATE:', match.group(1), flush=True)
         # SQL diagnostics may include private row contents: never print stderr.
         raise RuntimeError('Database utility failed; diagnostics withheld to protect private data')
     return result.stdout
@@ -85,7 +93,7 @@ def main():
         cloud_env.update(PGHOST=target['host'], PGPORT='5432', PGDATABASE='postgres',
                          PGUSER=target['user'], PGPASSWORD=target['password'], PGSSLMODE='require', PGCONNECT_TIMEOUT='15')
         print('Importing with atomic verification and API-role access revoked...', flush=True)
-        run([str(BIN / 'psql.exe'), '-X', '--single-transaction', '--set', 'ON_ERROR_STOP=1', '--file', '-'],
+        run([str(BIN / 'psql.exe'), '-X', '--single-transaction', '--set', 'ON_ERROR_STOP=1', '--set', 'VERBOSITY=verbose', '--file', '-'],
             cloud_env, pre.encode() + dump + post.encode())
     with psycopg.connect(**target) as cloud:
         cloud.execute('SET TRANSACTION READ ONLY')

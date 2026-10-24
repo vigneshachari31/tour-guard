@@ -36,6 +36,8 @@ def client(monkeypatch):
     )
     # SQLite is only used for auth/SOS unit tests, never for spatial verification.
     User.__table__.create(engine)
+    from backend.models import RefreshSession
+    RefreshSession.__table__.create(engine)
     UserProfile.__table__.create(engine)
     SOSEvent.__table__.create(engine)
     for model in [Trip, LocationHistory, RiskAssessmentLog, Responder, SOSHistory, RescueAssignment, AuditLog]:

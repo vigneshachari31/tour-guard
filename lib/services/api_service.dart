@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 
 import '../models/geofence_update.dart';
@@ -46,7 +46,8 @@ class AuthSession {
   final String accessToken;
   final String? touristId;
   final String role;
-  const AuthSession(this.accessToken, this.touristId, {this.role = 'tourist'});
+  final String? refreshToken;
+  const AuthSession(this.accessToken, this.touristId, {this.role = 'tourist', this.refreshToken});
   factory AuthSession.fromJson(Map<String, dynamic> json) {
     final token = json['access_token'];
     if (token is! String || token.isEmpty || json['token_type'] != 'bearer') {
@@ -57,6 +58,7 @@ class AuthSession {
       token,
       json['tourist_id'] as String?,
       role: role == 'admin' ? 'admin' : 'tourist',
+      refreshToken: json['refresh_token'] as String?,
     );
   }
   Map<String, dynamic> toJson() => {
@@ -64,6 +66,7 @@ class AuthSession {
     'token_type': 'bearer',
     'tourist_id': touristId,
     'role': role,
+    if (refreshToken != null) 'refresh_token': refreshToken,
   };
 }
 
@@ -188,6 +191,8 @@ class ApiService {
   final SessionStore _store;
   final String baseUrl;
   final Duration timeout;
+  Future<void>? _refreshing;
+  int _sessionGeneration = 0;
 
   static String get defaultBaseUrl {
     const configured = String.fromEnvironment('API_BASE_URL');
@@ -197,7 +202,7 @@ class ApiService {
     }
 
     return !kIsWeb && defaultTargetPlatform == TargetPlatform.android
-        ? 'http://10.108.68.215:8000/api/v1'
+        ? 'http://192.168.0.100:8000/api/v1'
         : 'http://127.0.0.1:8000/api/v1';
   }
 
@@ -235,8 +240,42 @@ class ApiService {
 
   Future<String?> getToken() async => (await getSession())?.accessToken;
   Future<void> logout() async {
+    _sessionGeneration++;
+    String? refresh;
+    try {
+      final saved = await _store.read();
+      if (saved != null) refresh = (jsonDecode(saved) as Map)['refresh_token'] as String?;
+    } catch (_) { /* Clear corrupt storage too. */ }
     ActiveTripState.instance.clear();
     await _store.clear();
+    if (refresh != null) {
+      try {
+        await _post('/auth/logout', {'refresh_token': refresh}, authenticated: false);
+      } on ApiException { /* Offline logout still removes credentials on this device. */ }
+    }
+  }
+
+  Future<void> _renewSession() {
+    return _refreshing ??= _performRenewal().whenComplete(() => _refreshing = null);
+  }
+
+  Future<void> _performRenewal() async {
+    final generation = _sessionGeneration;
+    final session = await getSession();
+    if (session?.refreshToken == null) {
+      throw const ApiException('Please sign in again.', statusCode: 401);
+    }
+    final data = await _post('/auth/refresh', {'refresh_token': session!.refreshToken}, authenticated: false);
+    final renewed = AuthSession.fromJson(data);
+    if (generation != _sessionGeneration) {
+      // Do not restore a session after logout or a different login.
+      if (renewed.refreshToken != null) {
+        try { await _post('/auth/logout', {'refresh_token': renewed.refreshToken}, authenticated: false); }
+        on ApiException { /* Credentials will not be retained locally. */ }
+      }
+      throw const ApiException('Session changed. Please sign in.', statusCode: 401);
+    }
+    await _store.write(jsonEncode(renewed.toJson()));
   }
 
   void close() => _client.close();
@@ -274,6 +313,7 @@ class ApiService {
     }, authenticated: false);
     try {
       final session = AuthSession.fromJson(json);
+      _sessionGeneration++;
       await _store.write(jsonEncode(session.toJson()));
       ActiveTripState.instance.clear();
       return session;
@@ -584,6 +624,7 @@ class ApiService {
     bool authenticated = true,
     String method = 'POST',
     bool binary = false,
+    bool allowRefresh = true,
   }) async {
     final token = authenticated ? await getToken() : null;
     if (authenticated && token == null) {
@@ -604,6 +645,15 @@ class ApiService {
           .then(http.Response.fromStream)
           .timeout(timeout);
       if (response.statusCode == 401) {
+        if (authenticated && allowRefresh) {
+          try {
+            if (await getToken() == token) await _renewSession();
+            return await _post(path, body, authenticated: true, method: method,
+              binary: binary, allowRefresh: false);
+          } on ApiException catch (error) {
+            if (!error.unauthorized) rethrow; // Network failures do not log the user out.
+          }
+        }
         if (authenticated && await getToken() == token) await logout();
         throw ApiException(
           authenticated

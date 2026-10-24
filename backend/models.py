@@ -39,6 +39,14 @@ class User(Base):
     emergency_contact_phone: Mapped[str | None] = mapped_column(String(25))
 
 
+class RefreshSession(Base):
+    __tablename__ = "refresh_sessions"
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    password_stamp: Mapped[str] = mapped_column(String(64))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class HazardZone(Base):
     __tablename__ = "hazard_zones"
     __table_args__ = (
