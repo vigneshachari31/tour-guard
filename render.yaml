@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: tour-guard
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health/ready
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ALLOW_LOCALHOST
+        value: "false"
+      - key: CORS_ORIGINS
+        value: "[]"
+      - key: HAZARD_COVERAGE_VERIFIED
+        value: "false"
