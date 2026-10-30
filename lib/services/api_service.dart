@@ -47,7 +47,12 @@ class AuthSession {
   final String? touristId;
   final String role;
   final String? refreshToken;
-  const AuthSession(this.accessToken, this.touristId, {this.role = 'tourist', this.refreshToken});
+  const AuthSession(
+    this.accessToken,
+    this.touristId, {
+    this.role = 'tourist',
+    this.refreshToken,
+  });
   factory AuthSession.fromJson(Map<String, dynamic> json) {
     final token = json['access_token'];
     if (token is! String || token.isEmpty || json['token_type'] != 'bearer') {
@@ -202,7 +207,7 @@ class ApiService {
     }
 
     return !kIsWeb && defaultTargetPlatform == TargetPlatform.android
-        ? 'http://192.168.0.100:8000/api/v1'
+        ? 'http://192.168.0.103:8000/api/v1'
         : 'http://127.0.0.1:8000/api/v1';
   }
 
@@ -244,19 +249,28 @@ class ApiService {
     String? refresh;
     try {
       final saved = await _store.read();
-      if (saved != null) refresh = (jsonDecode(saved) as Map)['refresh_token'] as String?;
-    } catch (_) { /* Clear corrupt storage too. */ }
+      if (saved != null)
+        refresh = (jsonDecode(saved) as Map)['refresh_token'] as String?;
+    } catch (_) {
+      /* Clear corrupt storage too. */
+    }
     ActiveTripState.instance.clear();
     await _store.clear();
     if (refresh != null) {
       try {
-        await _post('/auth/logout', {'refresh_token': refresh}, authenticated: false);
-      } on ApiException { /* Offline logout still removes credentials on this device. */ }
+        await _post('/auth/logout', {
+          'refresh_token': refresh,
+        }, authenticated: false);
+      } on ApiException {
+        /* Offline logout still removes credentials on this device. */
+      }
     }
   }
 
   Future<void> _renewSession() {
-    return _refreshing ??= _performRenewal().whenComplete(() => _refreshing = null);
+    return _refreshing ??= _performRenewal().whenComplete(
+      () => _refreshing = null,
+    );
   }
 
   Future<void> _performRenewal() async {
@@ -265,15 +279,25 @@ class ApiService {
     if (session?.refreshToken == null) {
       throw const ApiException('Please sign in again.', statusCode: 401);
     }
-    final data = await _post('/auth/refresh', {'refresh_token': session!.refreshToken}, authenticated: false);
+    final data = await _post('/auth/refresh', {
+      'refresh_token': session!.refreshToken,
+    }, authenticated: false);
     final renewed = AuthSession.fromJson(data);
     if (generation != _sessionGeneration) {
       // Do not restore a session after logout or a different login.
       if (renewed.refreshToken != null) {
-        try { await _post('/auth/logout', {'refresh_token': renewed.refreshToken}, authenticated: false); }
-        on ApiException { /* Credentials will not be retained locally. */ }
+        try {
+          await _post('/auth/logout', {
+            'refresh_token': renewed.refreshToken,
+          }, authenticated: false);
+        } on ApiException {
+          /* Credentials will not be retained locally. */
+        }
       }
-      throw const ApiException('Session changed. Please sign in.', statusCode: 401);
+      throw const ApiException(
+        'Session changed. Please sign in.',
+        statusCode: 401,
+      );
     }
     await _store.write(jsonEncode(renewed.toJson()));
   }
@@ -648,10 +672,17 @@ class ApiService {
         if (authenticated && allowRefresh) {
           try {
             if (await getToken() == token) await _renewSession();
-            return await _post(path, body, authenticated: true, method: method,
-              binary: binary, allowRefresh: false);
+            return await _post(
+              path,
+              body,
+              authenticated: true,
+              method: method,
+              binary: binary,
+              allowRefresh: false,
+            );
           } on ApiException catch (error) {
-            if (!error.unauthorized) rethrow; // Network failures do not log the user out.
+            if (!error.unauthorized)
+              rethrow; // Network failures do not log the user out.
           }
         }
         if (authenticated && await getToken() == token) await logout();
