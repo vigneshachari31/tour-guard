@@ -109,6 +109,14 @@ class ActiveTripState extends ChangeNotifier {
   }
 
   void reconcileHazards(Set<int> activeIds) {
+    _reconcileRecords({...activeIds, ...?_trip?.route.hazards.where((h) => h.id < 0).map((h) => h.id)});
+  }
+
+  void reconcileIncidentReports(Set<int> verifiedIds) {
+    _reconcileRecords({...verifiedIds, ...?_trip?.route.hazards.where((h) => h.id >= 0).map((h) => h.id)});
+  }
+
+  void _reconcileRecords(Set<int> activeIds) {
     final current = _trip;
     if (current == null) return;
     final route = current.route;

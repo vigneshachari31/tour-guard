@@ -151,6 +151,28 @@ class _MapScreenState extends State<MapScreen>
   // Hazards from Backend
   List<HazardSummary> _nearbyHazards = [];
   List<AdminHazard> _activeHazards = [];
+  List<AdminHazard> _incidents = [];
+  Timer? _incidentTimer;
+  bool _loadingIncidents = false;
+
+  Future<void> _refreshIncidents() async {
+    if (_loadingIncidents) return;
+    _loadingIncidents = true;
+    try {
+      final reports = await (widget.api ?? ApiService.instance).getVerifiedIncidentMarkers();
+      if (mounted) {
+        final ids = reports.map((r) => r.id).toSet();
+        _trips.reconcileIncidentReports(ids);
+        setState(() {
+          _incidents = reports;
+          _nearbyHazards = _nearbyHazards.where((h) => h.id >= 0 || ids.contains(h.id)).toList();
+          _routeRisk = _routeRisk?.reconcileVerifiedIncidents(ids);
+        });
+      }
+    } catch (_) {
+      // Preserve the last known verified markers on temporary connection failure.
+    } finally { _loadingIncidents = false; }
+  }
   bool _isLoadingHazards = false;
   int _gpsRequestId = 0;
   int _routeRequestId = 0;
@@ -213,6 +235,8 @@ class _MapScreenState extends State<MapScreen>
     }
 
     _userGpsLocation = _trips.position;
+    unawaited(_refreshIncidents());
+    _incidentTimer = Timer.periodic(const Duration(seconds: 30), (_) => _refreshIncidents());
     _trips.addListener(_onTripCleared);
     if (widget.trackGpsOnStart ||
         (_sourceLocation == null &&
@@ -235,6 +259,7 @@ class _MapScreenState extends State<MapScreen>
 
   @override
   void dispose() {
+    _incidentTimer?.cancel();
     HazardCatalog.instance.removeListener(_catalogChanged);
     _trips.removeListener(_onTripCleared);
     _debounceTimer?.cancel();
@@ -299,6 +324,7 @@ class _MapScreenState extends State<MapScreen>
   }
 
   Future<void> _loadActiveHazards() async {
+    unawaited(_refreshIncidents());
     await HazardCatalog.instance.refresh();
     _catalogChanged();
   }
@@ -310,7 +336,7 @@ class _MapScreenState extends State<MapScreen>
     setState(() {
       _activeHazards = catalog.items;
       _nearbyHazards = _nearbyHazards
-          .where((h) => catalog.activeIds.contains(h.id))
+          .where((h) => h.id < 0 || catalog.activeIds.contains(h.id))
           .toList();
     });
   }
@@ -369,6 +395,7 @@ class _MapScreenState extends State<MapScreen>
     final seen = <int>{};
     for (final h in _nearbyHazards) {
       if (widget.api == null &&
+          h.id >= 0 &&
           HazardCatalog.instance.hasLoaded &&
           !HazardCatalog.instance.activeIds.contains(h.id)) {
         continue;
@@ -388,7 +415,11 @@ class _MapScreenState extends State<MapScreen>
         );
       }
     }
-    for (final h in _activeHazards) {
+    final center = _userGpsLocation ?? _sourceLocation;
+    final nearbyIncidents = _incidents.where((h) => center != null && h.pointCoordinates != null &&
+      const Distance().as(LengthUnit.Meter, center,
+        LatLng(h.pointCoordinates![1], h.pointCoordinates![0])) <= 2000);
+    for (final h in [..._activeHazards, ...nearbyIncidents]) {
       if (seen.add(h.id)) {
         list.add(
           _MapHazardItem(
@@ -443,7 +474,9 @@ class _MapScreenState extends State<MapScreen>
             width: 36,
             height: 36,
             child: GestureDetector(
-              onTap: () => _showHazardInfo(h.name, h.hazardType, h.severity),
+              onTap: () => _showHazardInfo(
+                h.id < 0 ? '${_nearbyHazards.any((r) => r.id == h.id) ? 'On route' : 'Nearby'} incident: ${h.name}' : h.name,
+                h.hazardType, h.severity),
               child: Tooltip(
                 message:
                     '${h.name} (${h.hazardType}, Severity ${h.severity}/5)',
@@ -462,9 +495,9 @@ class _MapScreenState extends State<MapScreen>
                       ),
                     ],
                   ),
-                  child: const Center(
+                  child: Center(
                     child: Icon(
-                      Icons.warning_amber_rounded,
+                      h.id < 0 ? Icons.report_rounded : Icons.warning_amber_rounded,
                       color: Colors.white,
                       size: 20,
                     ),
@@ -1873,7 +1906,7 @@ class _RouteRiskSummaryCard extends StatelessWidget {
                       ? 'Loading nearby hazard reports...'
                       : hazardError != null
                       ? hazardError!
-                      : '${hazards.length} nearby hazard report${hazards.length == 1 ? '' : 's'}${hazards.isEmpty ? '' : ': ${hazards.map((h) => '${h.name} (${h.hazardType}, ${h.severity}/5)').join('; ')}'}',
+                      : routeHazardDescription(hazards),
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,

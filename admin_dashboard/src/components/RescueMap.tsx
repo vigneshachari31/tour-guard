@@ -16,8 +16,23 @@ import L from "leaflet";
 import type { Hazards, Incident, Trip } from "../types";
 import { Link } from "react-router-dom";
 import "leaflet/dist/leaflet.css";
+import { renderToStaticMarkup } from "react-dom/server";
+import { TriangleAlert, CarFront, Flame, Waves, TreePine } from "lucide-react";
 
 type Point = [number, number];
+
+function reportPin(type: string, severity: number) {
+  const Symbol = type === 'accident' ? CarFront : type === 'fire' ? Flame
+    : type === 'flood' || type === 'high_tide' ? Waves
+    : type === 'fallen_tree' ? TreePine : TriangleAlert;
+  return L.divIcon({
+    className: 'report-map-marker',
+    html: renderToStaticMarkup(<span className={`report-map-pin ${severity >= 4 ? 'report-map-pin-high' : 'report-map-pin-caution'}`}>
+      <Symbol size={22} strokeWidth={2.5} aria-hidden="true" />
+    </span>),
+    iconSize: [44, 52], iconAnchor: [22, 48], popupAnchor: [0, -44], tooltipAnchor: [0, -40],
+  });
+}
 
 const tripIcons = {
   start: L.divIcon({className: 'trip-map-marker', html: '<span class="trip-pin trip-pin-start">A</span>', iconSize: [34,34], iconAnchor: [17,17]}),
@@ -112,6 +127,7 @@ export default function RescueMap({
     <MapContainer
       center={[20.59, 78.96]}
       zoom={5}
+      maxZoom={18}
       className="rescue-map"
       scrollWheelZoom
     >
@@ -119,19 +135,32 @@ export default function RescueMap({
         attribution='Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, METI, TomTom'
         url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
         maxZoom={18}
+        maxNativeZoom={16}
       />
       {hazards && (
         <GeoJSON
           key={JSON.stringify(hazards)}
           data={hazards}
           style={{ color: "#E08700", weight: 2, fillOpacity: 0.17 }}
-          pointToLayer={(_, p) =>
-            L.circleMarker(p, { radius: 7, color: "#E08700" })
+          pointToLayer={(feature, p) =>
+            L.marker(p, { icon: reportPin(String(feature.properties?.hazard_type ?? ''),
+              Number(feature.properties?.severity ?? 0)),
+              title: String(feature.properties?.name ?? 'Reported incident'),
+              alt: 'Reported incident', keyboard: true })
           }
           onEachFeature={(f, layer) => {
             const label = document.createElement("span");
             label.textContent = String(f.properties?.name ?? "Hazard");
             layer.bindTooltip(label);
+            if (f.geometry.type === 'Point') {
+              const details = document.createElement('div');
+              const heading = document.createElement('strong');
+              heading.textContent = String(f.properties?.name ?? 'Reported incident');
+              const description = document.createElement('p');
+              description.textContent = `${String(f.properties?.hazard_type ?? 'Incident').replaceAll('_', ' ')} · Severity ${f.properties?.severity ?? 'Unknown'}/5`;
+              details.append(heading, description);
+              layer.bindPopup(details);
+            }
           }}
         />
       )}

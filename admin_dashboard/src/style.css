@@ -1334,6 +1334,13 @@ textarea:focus {
 }
 
 /* Trip map symbols: start, destination and tourist have distinct shapes/labels. */
+.report-map-marker { background: transparent; border: 0; }
+.report-map-pin { position: relative; display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; margin: 2px; box-sizing: border-box; border: 3px solid white; border-radius: 50%; color: white; box-shadow: 0 3px 10px #142c5055; }
+.report-map-pin::after { content: ''; position: absolute; left: 11px; bottom: -8px; width: 10px; height: 10px; background: inherit; border-right: 3px solid white; border-bottom: 3px solid white; transform: rotate(45deg); border-radius: 0 0 3px 0; }
+.report-map-pin svg { position: relative; z-index: 1; }
+.report-map-pin-caution { background: #c65d08; }
+.report-map-pin-high { background: #dc2626; }
+.report-map-marker:focus-visible { outline: 3px solid #087cf0; outline-offset: 4px; border-radius: 24px; }
 .trip-map-frame { position: relative; }
 .trip-map-legend { position: absolute; top: 14px; right: 14px; z-index: 500; display: flex; flex-wrap: wrap; gap: 12px; max-width: calc(100% - 80px); padding: 10px 14px; background: rgba(255,255,255,.96); border: 1px solid #dbe5f0; border-radius: 14px; box-shadow: 0 4px 18px #142c5020; font-size: 12px; color: #1a2d4f; pointer-events: none; }
 .trip-map-legend span { display: inline-flex; align-items: center; gap: 6px; }

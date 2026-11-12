@@ -1,7 +1,27 @@
 import 'package:flutter/material.dart';
 import '../models/route_response.dart';
 
+String routeHazardDescription(List<HazardSummary> hazards) {
+  if (hazards.isEmpty) return 'No reported incidents or hazard zones along this route.';
+  final zones = hazards.where((h) => h.id >= 0).length;
+  final incidents = hazards.length - zones;
+  return '$zones hazard zone(s) · $incidents verified incident(s) along this route: '
+      '${hazards.map((h) => '${h.name} (${h.severity}/5)').join('; ')}';
+}
+
 String routeSummary(RouteResponse route) {
+  if (route.limitations.any((r) => r.contains('out of date'))) {
+    return 'Report information changed. Recheck your route for an updated assessment.';
+  }
+  if (route.hazards.isEmpty && route.riskLevel == 'CAUTION') {
+    if (!route.weatherUsed) return 'No reported hazards on this route. Caution: weather could not be checked.';
+    if (route.reasons.any((r) => r.startsWith('Weather exceeds'))) {
+      return 'No reported hazards on this route. Caution: elevated rain or wind.';
+    }
+    if (route.limitations.any((r) => r.contains('coverage'))) {
+      return 'No reported hazards on this route. Caution: local hazard coverage is incomplete.';
+    }
+  }
   final text = route.reasons.join(' ');
   if (text.contains('Only one route available')) return 'No alternative route available.';
   if (text.contains('Original fastest route')) return 'Fastest route. Compare routes to check for fewer hazards.';

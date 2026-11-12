@@ -1,9 +1,14 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
 import HazardsPage from "./pages/Hazards";
-import HazardModeration from "./components/HazardModeration";
+import HazardModeration, { isMappableReport } from "./components/HazardModeration";
 
 vi.mock("./api", () => ({ api: vi.fn() }));
+it("rejected reports never appear on the incident map", () => {
+  expect([{status: "pending"}, {status: "verified"}, {status: "rejected"}].filter(isMappableReport))
+    .toEqual([{status: "pending"}, {status: "verified"}]);
+  expect(isMappableReport({status: "unknown"})).toBe(false);
+});
 vi.mock("./components/RescueMap", () => ({ default: ({ hazards }: { hazards: unknown }) => <pre>{JSON.stringify(hazards)}</pre> }));
 vi.mock("./hooks", () => ({
   date: (v: string) => v,

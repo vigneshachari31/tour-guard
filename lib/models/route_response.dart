@@ -62,6 +62,17 @@ class HazardSummary {
 }
 
 class RouteResponse {
+  RouteResponse reconcileVerifiedIncidents(Set<int> verifiedIds) {
+    final remaining = hazards.where((h) => h.id >= 0 || verifiedIds.contains(h.id)).toList();
+    if (remaining.length == hazards.length) return this;
+    return RouteResponse(originalPoints: originalPoints, originalHazardCount: originalHazardCount,
+      originalDurationSeconds: originalDurationSeconds, tripId: tripId, points: points,
+      distanceMeters: distanceMeters, durationSeconds: durationSeconds, bufferMeters: bufferMeters,
+      riskLevel: 'CAUTION', method: method,
+      reasons: const ['Incident status changed. Recheck the route for an updated assessment.'],
+      limitations: const ['The previous route assessment is out of date.'],
+      hazards: remaining, weatherUsed: weatherUsed);
+  }
   bool get hasDistinctOriginal {
     if (originalPoints.isEmpty) return false;
     if (originalPoints.length != points.length) return true;

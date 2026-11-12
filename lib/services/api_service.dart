@@ -539,6 +539,12 @@ class ApiService {
         .toList();
   }
 
+  Future<List<AdminHazard>> getVerifiedIncidentMarkers() async {
+    final result = await _post('/hazards/public', {}, authenticated: false, method: 'GET');
+    return (result['features'] as List)
+        .map((item) => AdminHazard.fromJson(item as Map<String, dynamic>)).toList();
+  }
+
   Future<List<AdminHazard>> getAdminHazards({
     bool includeInactive = false,
   }) async {
