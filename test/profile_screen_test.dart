@@ -10,6 +10,29 @@ import 'package:travel_risk_app/services/api_service.dart';
 import 'api_service_test.dart' show MemoryStore;
 
 void main() {
+  testWidgets(
+    'Logout clears saved session and opens login even when profile fails',
+    (tester) async {
+      final store = MemoryStore()
+        ..value = '{"access_token":"jwt","token_type":"bearer"}';
+      final api = ApiService(
+        store: store,
+        client: MockClient((_) async => http.Response('{}', 503)),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: ProfileScreen(api: api)),
+          routes: {'/login': (_) => const Scaffold(body: Text('Login page'))},
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Logout'));
+      await tester.pumpAndSettle();
+      expect(store.value, isNull);
+      expect(find.text('Login page'), findsOneWidget);
+      expect(find.byType(ProfileScreen), findsNothing);
+    },
+  );
   testWidgets('Avatar selection uploads and displays the saved image', (
     tester,
   ) async {
@@ -113,7 +136,12 @@ void main() {
     expect(profile['phone_number'], values[2]);
     expect(profile['allergies'], 'Pollen');
     expect(find.text('Profile saved to your account.'), findsOneWidget);
-    expect(find.textContaining('Changing your email also changes your sign-in email'), findsNothing);
+    expect(
+      find.textContaining(
+        'Changing your email also changes your sign-in email',
+      ),
+      findsNothing,
+    );
     expect(find.text('SAVE PROFILE'), findsNothing);
     expect(find.text('Edit Profile'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());

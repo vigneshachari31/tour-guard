@@ -197,15 +197,16 @@ export default function HazardsPage() {
           />
         </label>
         <label>
-          Valid from
+          Start date (optional)
           <input
             type="datetime-local"
             value={form.valid_from}
             onChange={(e) => setForm({ ...form, valid_from: e.target.value })}
           />
+          <small>Leave blank to show immediately. A future date hides the zone from tourist maps until that time.</small>
         </label>
         <label>
-          Valid until
+          Expiry date (optional)
           <input
             type="datetime-local"
             value={form.valid_until}

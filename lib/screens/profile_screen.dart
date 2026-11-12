@@ -27,6 +27,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _allergiesController = TextEditingController();
 
   bool _isLoading = true;
+  bool _isLoggingOut = false;
+
+  Future<void> _logout() async {
+    setState(() => _isLoggingOut = true);
+    try {
+      await _api.logout();
+      if (!mounted) return;
+      Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoggingOut = false);
+        _showMessage('Could not sign out. Please retry.', isError: true);
+      }
+    }
+  }
+
   bool _isSaving = false;
   bool _isUploading = false;
   bool _isEditing = false;
@@ -187,331 +203,361 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _loadError != null
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(_loadError!),
-                  TextButton(
-                    onPressed: _loadProfile,
-                    child: const Text('Retry'),
-                  ),
-                ],
+      child: Column(
+        children: [
+          Align(
+            alignment: Alignment.centerRight,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              child: TextButton.icon(
+                onPressed: _isLoggingOut ? null : _logout,
+                icon: const Icon(Icons.logout_rounded),
+                label: Text(_isLoggingOut ? 'Logging out...' : 'Logout'),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFFDC2626),
+                ),
               ),
-            )
-          : SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                MediaQuery.sizeOf(context).width > 760
-                    ? (MediaQuery.sizeOf(context).width - 700) / 2
-                    : 20,
-                20,
-                MediaQuery.sizeOf(context).width > 760
-                    ? (MediaQuery.sizeOf(context).width - 700) / 2
-                    : 20,
-                32,
-              ),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            ),
+          ),
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _loadError != null
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text(
-                          'My profile',
-                          style: TextStyle(
-                            fontSize: 25,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.6,
-                            color: Color(0xFF1A2D4F),
-                          ),
-                        ),
-                        TextButton.icon(
-                          onPressed: _isSaving || _isUploading
-                              ? null
-                              : () {
-                                  setState(() {
-                                    _isEditing = !_isEditing;
-                                    if (!_isEditing && _loadedProfile != null) {
-                                      _fill(_loadedProfile!);
-                                    }
-                                  });
-                                },
-                          icon: Icon(
-                            _isEditing ? Icons.close : Icons.edit_outlined,
-                            size: 16,
-                            color: const Color(0xFF087CF0),
-                          ),
-                          label: Text(
-                            _isEditing ? 'Cancel' : 'Edit Profile',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF087CF0),
-                            ),
-                          ),
+                        Text(_loadError!),
+                        TextButton(
+                          onPressed: _loadProfile,
+                          child: const Text('Retry'),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 28,
-                      ),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [Color(0xFF142C50), Color(0xFF145EA8)],
-                        ),
-                        borderRadius: BorderRadius.circular(28),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x24145EA8),
-                            blurRadius: 24,
-                            offset: Offset(0, 10),
-                          ),
-                        ],
-                      ),
+                  )
+                : SingleChildScrollView(
+                    padding: EdgeInsets.fromLTRB(
+                      MediaQuery.sizeOf(context).width > 760
+                          ? (MediaQuery.sizeOf(context).width - 700) / 2
+                          : 20,
+                      20,
+                      MediaQuery.sizeOf(context).width > 760
+                          ? (MediaQuery.sizeOf(context).width - 700) / 2
+                          : 20,
+                      32,
+                    ),
+                    child: Form(
+                      key: _formKey,
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Stack(
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Container(
-                                padding: const EdgeInsets.all(5),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white.withValues(alpha: .4),
-                                    width: 1.5,
-                                  ),
-                                ),
-                                child: InkWell(
-                                  onTap: _isUploading || _isSaving
-                                      ? null
-                                      : _uploadPhoto,
-                                  child: ClipOval(
-                                    child: SizedBox(
-                                      width: 76,
-                                      height: 76,
-                                      child: _isUploading
-                                          ? const Center(
-                                              child:
-                                                  CircularProgressIndicator(),
-                                            )
-                                          : _avatar != null
-                                          ? Image.memory(
-                                              _avatar!,
-                                              fit: BoxFit.cover,
-                                              errorBuilder: (_, _, _) =>
-                                                  const Icon(
-                                                    Icons.person,
-                                                    size: 40,
-                                                  ),
-                                            )
-                                          : CircleAvatar(
-                                              radius: 38,
-                                              backgroundColor: const Color(
-                                                0xFFE8F3FF,
-                                              ),
-                                              child: Text(
-                                                _nameController.text
-                                                        .trim()
-                                                        .isEmpty
-                                                    ? '?'
-                                                    : _nameController.text
-                                                          .trim()[0]
-                                                          .toUpperCase(),
-                                                style: const TextStyle(
-                                                  fontSize: 30,
-                                                  color: Color(0xFF087CF0),
-                                                ),
-                                              ),
-                                            ),
-                                    ),
-                                  ),
+                              const Text(
+                                'My profile',
+                                style: TextStyle(
+                                  fontSize: 25,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.6,
+                                  color: Color(0xFF1A2D4F),
                                 ),
                               ),
-                              Positioned(
-                                right: 0,
-                                bottom: 0,
-                                child: IconButton(
-                                  tooltip: 'Edit profile photo',
-                                  style: IconButton.styleFrom(
-                                    backgroundColor: const Color(0xFF087CF0),
-                                    minimumSize: const Size(32, 32),
-                                    padding: const EdgeInsets.all(7),
-                                    side: const BorderSide(
-                                      color: Colors.white,
-                                      width: 2,
-                                    ),
-                                  ),
-                                  onPressed: _isUploading || _isSaving
-                                      ? null
-                                      : _uploadPhoto,
-                                  icon: const Icon(
-                                    Icons.camera_alt_outlined,
-                                    size: 17,
-                                    color: Colors.white,
+                              TextButton.icon(
+                                onPressed: _isSaving || _isUploading
+                                    ? null
+                                    : () {
+                                        setState(() {
+                                          _isEditing = !_isEditing;
+                                          if (!_isEditing &&
+                                              _loadedProfile != null) {
+                                            _fill(_loadedProfile!);
+                                          }
+                                        });
+                                      },
+                                icon: Icon(
+                                  _isEditing
+                                      ? Icons.close
+                                      : Icons.edit_outlined,
+                                  size: 16,
+                                  color: const Color(0xFF087CF0),
+                                ),
+                                label: Text(
+                                  _isEditing ? 'Cancel' : 'Edit Profile',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF087CF0),
                                   ),
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 10),
-                          Text(
-                            _nameController.text.trim().isEmpty
-                                ? 'Add your name'
-                                : _nameController.text.trim(),
-                            style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'Tourist safety profile',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Color(0xFFC2DCF5),
-                            ),
-                          ),
-                          const SizedBox(height: 18),
+                          const SizedBox(height: 16),
                           Container(
+                            width: double.infinity,
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 8,
+                              horizontal: 24,
+                              vertical: 28,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: .1),
-                              borderRadius: BorderRadius.circular(30),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.shield_outlined,
-                                  size: 16,
-                                  color: Color(0xFF9DD9FF),
+                              gradient: const LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [Color(0xFF142C50), Color(0xFF145EA8)],
+                              ),
+                              borderRadius: BorderRadius.circular(28),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Color(0x24145EA8),
+                                  blurRadius: 24,
+                                  offset: Offset(0, 10),
                                 ),
-                                SizedBox(width: 7),
+                              ],
+                            ),
+                            child: Column(
+                              children: [
+                                Stack(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(5),
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: Colors.white.withValues(
+                                            alpha: .4,
+                                          ),
+                                          width: 1.5,
+                                        ),
+                                      ),
+                                      child: InkWell(
+                                        onTap: _isUploading || _isSaving
+                                            ? null
+                                            : _uploadPhoto,
+                                        child: ClipOval(
+                                          child: SizedBox(
+                                            width: 76,
+                                            height: 76,
+                                            child: _isUploading
+                                                ? const Center(
+                                                    child:
+                                                        CircularProgressIndicator(),
+                                                  )
+                                                : _avatar != null
+                                                ? Image.memory(
+                                                    _avatar!,
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder: (_, _, _) =>
+                                                        const Icon(
+                                                          Icons.person,
+                                                          size: 40,
+                                                        ),
+                                                  )
+                                                : CircleAvatar(
+                                                    radius: 38,
+                                                    backgroundColor:
+                                                        const Color(0xFFE8F3FF),
+                                                    child: Text(
+                                                      _nameController.text
+                                                              .trim()
+                                                              .isEmpty
+                                                          ? '?'
+                                                          : _nameController.text
+                                                                .trim()[0]
+                                                                .toUpperCase(),
+                                                      style: const TextStyle(
+                                                        fontSize: 30,
+                                                        color: Color(
+                                                          0xFF087CF0,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Positioned(
+                                      right: 0,
+                                      bottom: 0,
+                                      child: IconButton(
+                                        tooltip: 'Edit profile photo',
+                                        style: IconButton.styleFrom(
+                                          backgroundColor: const Color(
+                                            0xFF087CF0,
+                                          ),
+                                          minimumSize: const Size(32, 32),
+                                          padding: const EdgeInsets.all(7),
+                                          side: const BorderSide(
+                                            color: Colors.white,
+                                            width: 2,
+                                          ),
+                                        ),
+                                        onPressed: _isUploading || _isSaving
+                                            ? null
+                                            : _uploadPhoto,
+                                        icon: const Icon(
+                                          Icons.camera_alt_outlined,
+                                          size: 17,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
                                 Text(
-                                  'TOUR GUARD TRAVELER',
+                                  _nameController.text.trim().isEmpty
+                                      ? 'Add your name'
+                                      : _nameController.text.trim(),
+                                  style: const TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'Tourist safety profile',
                                   style: TextStyle(
-                                    fontSize: 10,
-                                    letterSpacing: 1.4,
-                                    fontWeight: FontWeight.w700,
-                                    color: Color(0xFFE0F0FF),
+                                    fontSize: 13,
+                                    color: Color(0xFFC2DCF5),
+                                  ),
+                                ),
+                                const SizedBox(height: 18),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: .1),
+                                    borderRadius: BorderRadius.circular(30),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.shield_outlined,
+                                        size: 16,
+                                        color: Color(0xFF9DD9FF),
+                                      ),
+                                      SizedBox(width: 7),
+                                      Text(
+                                        'TOUR GUARD TRAVELER',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          letterSpacing: 1.4,
+                                          fontWeight: FontWeight.w700,
+                                          color: Color(0xFFE0F0FF),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
                             ),
                           ),
+                          const SizedBox(height: 20),
+                          _sectionTitle('PERSONAL DETAILS'),
+                          const SizedBox(height: 10),
+                          _textField(
+                            controller: _nameController,
+                            label: 'Full name',
+                            icon: Icons.person_outline_rounded,
+                            validator: (value) =>
+                                value == null || value.trim().isEmpty
+                                ? 'Enter your name'
+                                : null,
+                            onChanged: (_) => setState(() {}),
+                          ),
+                          _textField(
+                            controller: _emailController,
+                            label: 'Email address',
+                            icon: Icons.mail_outline_rounded,
+                            keyboardType: TextInputType.emailAddress,
+                            validator: (v) => v == null || !v.contains('@')
+                                ? 'Enter a valid email address'
+                                : null,
+                          ),
+                          _textField(
+                            controller: _phoneController,
+                            label: 'Mobile number',
+                            icon: Icons.phone_outlined,
+                            keyboardType: TextInputType.phone,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'[0-9+\-\s]'),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          _sectionTitle('EMERGENCY INFORMATION'),
+                          const SizedBox(height: 10),
+                          _textField(
+                            controller: _bloodGroupController,
+                            label: 'Blood group (optional)',
+                            icon: Icons.bloodtype_outlined,
+                            hintText: 'e.g. O+',
+                          ),
+                          _textField(
+                            controller: _emergencyContactController,
+                            label: 'Emergency contact',
+                            icon: Icons.contact_phone_outlined,
+                            keyboardType: TextInputType.phone,
+                            hintText: 'Name and phone number',
+                          ),
+                          _textField(
+                            controller: _medicalNotesController,
+                            label: 'Medical notes',
+                            icon: Icons.medical_information_outlined,
+                            maxLines: 2,
+                          ),
+                          _textField(
+                            controller: _allergiesController,
+                            label: 'Allergies',
+                            icon: Icons.warning_amber_rounded,
+                            maxLines: 2,
+                          ),
+                          if (_isEditing) ...[
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              height: 52,
+                              child: ElevatedButton.icon(
+                                onPressed: _isSaving || _isUploading
+                                    ? null
+                                    : _saveProfile,
+                                icon: _isSaving
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : const Icon(Icons.save_outlined),
+                                label: Text(
+                                  _isSaving ? 'SAVING...' : 'SAVE PROFILE',
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF087CF0),
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
-                    const SizedBox(height: 20),
-                    _sectionTitle('PERSONAL DETAILS'),
-                    const SizedBox(height: 10),
-                    _textField(
-                      controller: _nameController,
-                      label: 'Full name',
-                      icon: Icons.person_outline_rounded,
-                      validator: (value) =>
-                          value == null || value.trim().isEmpty
-                          ? 'Enter your name'
-                          : null,
-                      onChanged: (_) => setState(() {}),
-                    ),
-                    _textField(
-                      controller: _emailController,
-                      label: 'Email address',
-                      icon: Icons.mail_outline_rounded,
-                      keyboardType: TextInputType.emailAddress,
-                      validator: (v) => v == null || !v.contains('@')
-                          ? 'Enter a valid email address'
-                          : null,
-                    ),
-                    _textField(
-                      controller: _phoneController,
-                      label: 'Mobile number',
-                      icon: Icons.phone_outlined,
-                      keyboardType: TextInputType.phone,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                          RegExp(r'[0-9+\-\s]'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    _sectionTitle('EMERGENCY INFORMATION'),
-                    const SizedBox(height: 10),
-                    _textField(
-                      controller: _bloodGroupController,
-                      label: 'Blood group (optional)',
-                      icon: Icons.bloodtype_outlined,
-                      hintText: 'e.g. O+',
-                    ),
-                    _textField(
-                      controller: _emergencyContactController,
-                      label: 'Emergency contact',
-                      icon: Icons.contact_phone_outlined,
-                      keyboardType: TextInputType.phone,
-                      hintText: 'Name and phone number',
-                    ),
-                    _textField(
-                      controller: _medicalNotesController,
-                      label: 'Medical notes',
-                      icon: Icons.medical_information_outlined,
-                      maxLines: 2,
-                    ),
-                    _textField(
-                      controller: _allergiesController,
-                      label: 'Allergies',
-                      icon: Icons.warning_amber_rounded,
-                      maxLines: 2,
-                    ),
-                    if (_isEditing) ...[
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 52,
-                        child: ElevatedButton.icon(
-                          onPressed: _isSaving || _isUploading
-                              ? null
-                              : _saveProfile,
-                          icon: _isSaving
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Icon(Icons.save_outlined),
-                          label: Text(_isSaving ? 'SAVING...' : 'SAVE PROFILE'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF087CF0),
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
+                  ),
+          ),
+        ],
+      ),
     );
   }
 

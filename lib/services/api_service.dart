@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 
 import '../models/geofence_update.dart';
@@ -198,6 +198,16 @@ class ApiService {
   final Duration timeout;
   Future<void>? _refreshing;
   int _sessionGeneration = 0;
+  final sosEvents = ValueNotifier<List<Map<String, dynamic>>>(const []);
+  final sosOperation = ValueNotifier<String?>(null);
+  List<Map<String, dynamic>> get cachedSosEvents => sosEvents.value;
+  set cachedSosEvents(List<Map<String, dynamic>> events) {
+    sosEvents.value = List.unmodifiable(
+      events.map((event) => Map<String, dynamic>.unmodifiable(event)),
+    );
+  }
+
+  int _sosRevision = 0;
 
   static String get defaultBaseUrl {
     const configured = String.fromEnvironment('API_BASE_URL');
@@ -245,7 +255,10 @@ class ApiService {
 
   Future<String?> getToken() async => (await getSession())?.accessToken;
   Future<void> logout() async {
+    sosOperation.value = null;
     _sessionGeneration++;
+    cachedSosEvents = [];
+    _sosRevision++;
     String? refresh;
     try {
       final saved = await _store.read();
@@ -338,6 +351,8 @@ class ApiService {
     try {
       final session = AuthSession.fromJson(json);
       _sessionGeneration++;
+      cachedSosEvents = [];
+      _sosRevision++;
       await _store.write(jsonEncode(session.toJson()));
       ActiveTripState.instance.clear();
       return session;
@@ -425,6 +440,7 @@ class ApiService {
     required double longitude,
     String? touristId,
   }) async {
+    final generation = _sessionGeneration;
     final session = await getSession();
     if (session == null) {
       throw const ApiException('Please sign in again.', statusCode: 401);
@@ -441,7 +457,18 @@ class ApiService {
       'longitude': longitude,
     });
     try {
-      return SosReceipt.fromJson(json);
+      final receipt = SosReceipt.fromJson(json);
+      if (generation != _sessionGeneration) return receipt;
+      _sosRevision++;
+      cachedSosEvents = [
+        {
+          ...json,
+          'id': receipt.id,
+          'workflow_status': json['workflow_status'] ?? 'OPEN',
+        },
+        ...cachedSosEvents.where((e) => e['id'] != receipt.id),
+      ];
+      return receipt;
     } catch (_) {
       throw const ApiException(
         'SOS response was unreadable. Delivery is unconfirmed; check before retrying.',
@@ -454,7 +481,20 @@ class ApiService {
   }
 
   Future<void> cancelSos(int id) async {
-    await _post('/sos/events/$id/cancel', {});
+    sosOperation.value = 'Cancelling SOS';
+    try {
+      final generation = _sessionGeneration;
+      await _post('/sos/events/$id/cancel', {});
+      if (generation != _sessionGeneration) return;
+      _sosRevision++;
+      cachedSosEvents = cachedSosEvents
+          .map(
+            (e) => e['id'] == id ? {...e, 'workflow_status': 'CANCELLED'} : e,
+          )
+          .toList();
+    } finally {
+      sosOperation.value = null;
+    }
   }
 
   Future<List<Map<String, dynamic>>> getNearbyTouristReports(
@@ -484,10 +524,16 @@ class ApiService {
   }
 
   Future<List<Map<String, dynamic>>> getSosHistory() async {
+    final generation = _sessionGeneration;
+    final revision = _sosRevision;
     final response = await _post('/sos/events', {}, method: 'GET');
     final events = response['events'];
+    if (generation != _sessionGeneration || revision != _sosRevision) {
+      return cachedSosEvents;
+    }
     if (events is List) {
-      return events.whereType<Map<String, dynamic>>().toList();
+      cachedSosEvents = events.whereType<Map<String, dynamic>>().toList();
+      return cachedSosEvents;
     }
     return [];
   }
@@ -540,9 +586,15 @@ class ApiService {
   }
 
   Future<List<AdminHazard>> getVerifiedIncidentMarkers() async {
-    final result = await _post('/hazards/public', {}, authenticated: false, method: 'GET');
+    final result = await _post(
+      '/hazards/public',
+      {},
+      authenticated: false,
+      method: 'GET',
+    );
     return (result['features'] as List)
-        .map((item) => AdminHazard.fromJson(item as Map<String, dynamic>)).toList();
+        .map((item) => AdminHazard.fromJson(item as Map<String, dynamic>))
+        .toList();
   }
 
   Future<List<AdminHazard>> getAdminHazards({

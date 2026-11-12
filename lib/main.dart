@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'widgets/sos_location_monitor.dart';
 
 import 'widgets/trip_hazard_monitor.dart';
@@ -18,6 +19,15 @@ import 'screens/admin_dashboard_screen.dart';
 // ==============================================================================
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarDividerColor: Colors.transparent,
+      systemNavigationBarIconBrightness: Brightness.dark,
+    ),
+  );
   runApp(const TravelRiskApp());
 }
 

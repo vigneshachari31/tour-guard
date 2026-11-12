@@ -162,7 +162,7 @@ export default function Login() {
 
             <div className="login-security-tag">
               <ShieldCheck size={18} />
-              <span>Authorized personnel only</span>
+              <span>Authorized person only</span>
             </div>
           </form>
         </div>

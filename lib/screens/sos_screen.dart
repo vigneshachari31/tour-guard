@@ -42,29 +42,8 @@ class _SosScreenState extends State<SosScreen>
     _checkingStatus = true;
     try {
       final events = await ApiService.instance.getActiveSosEvents();
-      if (!mounted || events.isEmpty) return;
-      final event = events.first;
-      _incidentId = event['id'] as int;
-      final status = event['workflow_status'] ?? 'OPEN';
-      final responder = event['responder'] as Map<String, dynamic>?;
-      final stage = event['responder_stage'] as String? ?? 'UNASSIGNED';
-      final active = status == 'OPEN' || status == 'IN_PROGRESS';
-      setState(() {
-        _isSosDispatched = active;
-        _responderStage = stage;
-        _sosStatusMessage =
-            'SOS #${event['id']}: ${switch (status) {
-              'OPEN' => responder != null ? 'Responder assigned. Awaiting acceptance.' : 'Received. Waiting for assignment.',
-              'IN_PROGRESS' => stage == 'ARRIVED'
-                  ? 'Responder arrival confirmed.'
-                  : stage == 'DEPARTED'
-                  ? 'Responder departure confirmed.'
-                  : 'Response started by the rescue desk.',
-              'RESOLVED' => 'Resolved by the rescue desk.',
-              'CANCELLED' => 'Cancelled.',
-              _ => 'Status unavailable.',
-            }}${responder == null ? '' : '\nResponder: ${responder['name']} • ${responder['phone']}\nProgress: $stage (recorded by rescue desk)'}';
-      });
+      if (!mounted) return;
+      _applyStatus(events);
     } catch (_) {
       if (mounted && _isSosDispatched) {
         setState(
@@ -74,6 +53,39 @@ class _SosScreenState extends State<SosScreen>
     } finally {
       _checkingStatus = false;
     }
+  }
+
+  void _applyStatus(List<Map<String, dynamic>> events) {
+    if (events.isEmpty) {
+      setState(() {
+        _isSosDispatched = false;
+        _incidentId = null;
+        _sosStatusMessage = null;
+      });
+      return;
+    }
+    final event = events.first;
+    _incidentId = event['id'] as int;
+    final status = event['workflow_status'] ?? 'OPEN';
+    final responder = event['responder'] as Map<String, dynamic>?;
+    final stage = event['responder_stage'] as String? ?? 'UNASSIGNED';
+    final active = status == 'OPEN' || status == 'IN_PROGRESS';
+    setState(() {
+      _isSosDispatched = active;
+      _responderStage = stage;
+      _sosStatusMessage =
+          'SOS #${event['id']}: ${switch (status) {
+            'OPEN' => responder != null ? 'Responder assigned. Awaiting acceptance.' : 'Received. Waiting for assignment.',
+            'IN_PROGRESS' => stage == 'ARRIVED'
+                ? 'Responder arrival confirmed.'
+                : stage == 'DEPARTED'
+                ? 'Responder departure confirmed.'
+                : 'Response started by the rescue desk.',
+            'RESOLVED' => 'Resolved by the rescue desk.',
+            'CANCELLED' => 'Cancelled.',
+            _ => 'Status unavailable.',
+          }}${responder == null ? '' : '\nResponder: ${responder['name']} • ${responder['phone']}\nProgress: $stage (recorded by rescue desk)'}';
+    });
   }
 
   int _countdownSeconds = 3;
@@ -113,6 +125,7 @@ class _SosScreenState extends State<SosScreen>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
+    _applyStatus(ApiService.instance.cachedSosEvents);
     _loadTouristProfile();
     _refreshStatus();
     _statusTimer = Timer.periodic(
@@ -209,6 +222,7 @@ class _SosScreenState extends State<SosScreen>
 
   // ─── 4. DISPATCH SOS PACKET ─────────────────────────────────────────────────
   Future<void> _dispatchSosEmergency() async {
+    ApiService.instance.sosOperation.value = 'Sending SOS';
     setState(() {
       _isCountingDown = false;
       _isSosDispatching = true;
@@ -241,6 +255,8 @@ class _SosScreenState extends State<SosScreen>
       if (error is ApiException && error.unauthorized) {
         Navigator.pushNamedAndRemoveUntil(context, '/login', (_) => false);
       }
+    } finally {
+      ApiService.instance.sosOperation.value = null;
     }
   }
 
@@ -326,12 +342,17 @@ class _SosScreenState extends State<SosScreen>
         centerTitle: true,
       ),
       body: SafeArea(
+        bottom: true,
         child: SingleChildScrollView(
-          padding: EdgeInsets.symmetric(
-            horizontal: MediaQuery.sizeOf(context).width > 760
+          padding: EdgeInsets.only(
+            left: MediaQuery.sizeOf(context).width > 760
                 ? (MediaQuery.sizeOf(context).width - 700) / 2
                 : 20,
-            vertical: 16,
+            right: MediaQuery.sizeOf(context).width > 760
+                ? (MediaQuery.sizeOf(context).width - 700) / 2
+                : 20,
+            top: 16,
+            bottom: 24 + MediaQuery.paddingOf(context).bottom,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -374,12 +395,14 @@ class _SosScreenState extends State<SosScreen>
                             size: 22,
                           ),
                           SizedBox(width: 10),
-                          Text(
-                            'Rescue desk update',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
+                          Expanded(
+                            child: Text(
+                              'Rescue desk update',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                         ],
@@ -497,6 +520,7 @@ class _SosScreenState extends State<SosScreen>
                     Container(
                       width: 140,
                       height: 140,
+                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         border: Border.all(
@@ -558,13 +582,21 @@ class _SosScreenState extends State<SosScreen>
                                     size: 40,
                                   ),
                                   SizedBox(height: 4),
-                                  Text(
-                                    _stageLabel,
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w900,
-                                      color: Colors.white,
-                                      letterSpacing: 1.0,
+                                  Flexible(
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        _stageLabel == 'SOS RECEIVED'
+                                            ? 'SOS\nRECEIVED'
+                                            : _stageLabel,
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w900,
+                                          color: Colors.white,
+                                          letterSpacing: 1.0,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -620,7 +652,7 @@ class _SosScreenState extends State<SosScreen>
               if (_isSosDispatched) ...[
                 const SizedBox(height: 8),
                 Text(
-                  'Public emergency services are not contacted automatically. Use the call option if you need them.',
+                  'Public emergency services are not contacted automatically. Use the call options below for direct help.',
                   style: const TextStyle(
                     fontSize: 12,
                     color: Color(0xFFFCA5A5),

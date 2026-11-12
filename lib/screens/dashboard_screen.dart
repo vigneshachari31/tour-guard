@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import '../widgets/sos_alert_card.dart';
 
 import 'package:flutter/material.dart';
@@ -47,6 +48,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _sosBusy = false;
   bool _sosOffline = false;
   Future<List<Map<String, dynamic>>>? _alertsFuture;
+  ApiService get _api => widget.api ?? ApiService.instance;
+
+  void _sosChanged() {
+    if (!mounted) return;
+    final events = _api.cachedSosEvents;
+    final active = events.where(
+      (e) => ['OPEN', 'IN_PROGRESS'].contains(e['workflow_status']),
+    );
+    setState(() {
+      _activeSos = active.isEmpty ? null : active.first;
+      _sosOffline = false;
+      _alertsFuture = Future.value(events);
+    });
+  }
 
   Future<void> _reloadAlerts() async {
     final request = (widget.api ?? ApiService.instance).getActiveSosEvents();
@@ -89,6 +104,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
+    _api.sosEvents.addListener(_sosChanged);
+    _api.sosOperation.addListener(_sosChanged);
+    _sosChanged();
     _syncTrip();
     _trips.addListener(_tripChanged);
     if (widget.tripState == null) {
@@ -110,6 +128,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void dispose() {
+    _api.sosEvents.removeListener(_sosChanged);
+    _api.sosOperation.removeListener(_sosChanged);
     _sosTimer?.cancel();
     _trips.removeListener(_tripChanged);
     _destinationController.dispose();
@@ -211,6 +231,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -240,325 +261,342 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   });
             }
 
-            return Padding(
-              padding: EdgeInsets.only(
-                left: 20,
-                right: 20,
-                top: 20,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.warning_amber_rounded,
-                          color: Color(0xFFFF9800),
-                          size: 28,
-                        ),
-                        const SizedBox(width: 10),
-                        const Expanded(
-                          child: Text(
-                            'Report Incident',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF1A2D4F),
+            final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+            final bottomPadding = MediaQuery.paddingOf(context).bottom;
+
+            return SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 20,
+                  right: 20,
+                  top: 20,
+                  bottom: bottomInset > 0
+                      ? bottomInset + 16
+                      : bottomPadding + 20,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.warning_amber_rounded,
+                            color: Color(0xFFFF9800),
+                            size: 28,
+                          ),
+                          const SizedBox(width: 10),
+                          const Expanded(
+                            child: Text(
+                              'Report Incident',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF1A2D4F),
+                              ),
                             ),
                           ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () => Navigator.pop(ctx),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    if (isLocating)
-                      const Row(
-                        children: [
-                          SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                          SizedBox(width: 10),
-                          Text(
-                            'Pinpointing your GPS location...',
-                            style: TextStyle(fontSize: 13, color: Colors.grey),
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: () => Navigator.pop(ctx),
                           ),
                         ],
-                      )
-                    else if (location != null)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE8F3FF),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
+                      ),
+                      const SizedBox(height: 12),
+                      if (isLocating)
+                        const Row(
                           children: [
-                            const Icon(
-                              Icons.my_location,
-                              size: 16,
-                              color: Color(0xFF087CF0),
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             ),
-                            const SizedBox(width: 8),
+                            SizedBox(width: 10),
                             Text(
-                              'Location: ${location!.latitude.toStringAsFixed(4)}, ${location!.longitude.toStringAsFixed(4)}',
-                              style: const TextStyle(
+                              'Pinpointing your GPS location...',
+                              style: TextStyle(
                                 fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF087CF0),
+                                color: Colors.grey,
                               ),
                             ),
                           ],
-                        ),
-                      )
-                    else
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFEAEA),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          'Location error: $locationError',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFFDC2626),
-                          ),
-                        ),
-                      ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Incident Type',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    DropdownButtonFormField<String>(
-                      initialValue: hazardType,
-                      decoration: InputDecoration(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 12,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'accident',
-                          child: Text('Road Accident'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'fire',
-                          child: Text('Fire / Smoke'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'fallen_tree',
-                          child: Text('Fallen Tree'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'damaged_road',
-                          child: Text('Damaged Road / Pothole'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'landslide',
-                          child: Text('Landslide / Rockfall'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'flood',
-                          child: Text('Flash Flood / Waterlogging'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'road',
-                          child: Text('Road Closure / Obstruction'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'weather',
-                          child: Text('Severe Storm / Wind'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'fog',
-                          child: Text('Dense Fog / Low Visibility'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'animal',
-                          child: Text('Wildlife Hazard'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'other',
-                          child: Text('Other Incident'),
-                        ),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) setSheetState(() => hazardType = val);
-                      },
-                    ),
-                    const SizedBox(height: 14),
-                    const Text(
-                      'Severity (1 = Minor, 5 = Critical)',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Slider(
-                            value: severity.toDouble(),
-                            min: 1,
-                            max: 5,
-                            divisions: 4,
-                            label: 'Severity: $severity',
-                            activeColor: severity >= 4
-                                ? const Color(0xFFDC2626)
-                                : const Color(0xFFFF9800),
-                            onChanged: (val) =>
-                                setSheetState(() => severity = val.round()),
-                          ),
-                        ),
+                        )
+                      else if (location != null)
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
+                            horizontal: 12,
+                            vertical: 8,
                           ),
                           decoration: BoxDecoration(
-                            color: severity >= 4
-                                ? const Color(0xFFFFEAEA)
-                                : const Color(0xFFFFF3E0),
-                            borderRadius: BorderRadius.circular(8),
+                            color: const Color(0xFFE8F3FF),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.my_location,
+                                size: 16,
+                                color: Color(0xFF087CF0),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Location: ${location!.latitude.toStringAsFixed(4)}, ${location!.longitude.toStringAsFixed(4)}',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF087CF0),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFEAEA),
+                            borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
-                            'Level $severity',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: severity >= 4
-                                  ? const Color(0xFFDC2626)
-                                  : const Color(0xFFE65100),
+                            'Location error: $locationError',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFFDC2626),
                             ),
                           ),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    const Text(
-                      'Incident Description',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: nameController,
-                      decoration: InputDecoration(
-                        hintText: 'e.g. Fallen tree blocking both lanes near hairpin 3',
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 12,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Incident Type',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
                         ),
                       ),
-                      maxLines: 2,
-                    ),
-                    const SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF087CF0),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
+                      const SizedBox(height: 6),
+                      DropdownButtonFormField<String>(
+                        initialValue: hazardType,
+                        decoration: InputDecoration(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        onPressed: (isSubmitting || location == null)
-                            ? null
-                            : () async {
-                                final desc = nameController.text.trim();
-                                if (desc.length < 3) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Please enter at least 3 characters for the description.',
-                                      ),
-                                      backgroundColor: Color(0xFFDC2626),
-                                    ),
-                                  );
-                                  return;
-                                }
-                                setSheetState(() => isSubmitting = true);
-                                try {
-                                  final result = await ApiService.instance
-                                      .reportTouristHazard(
-                                        description: desc,
-                                        hazardType: hazardType,
-                                        severity: severity,
-                                        latitude: location!.latitude,
-                                        longitude: location!.longitude,
-                                      );
-                                  if (ctx.mounted) Navigator.pop(ctx);
-                                  if (!mounted) return;
-                                  ScaffoldMessenger.of(
-                                    this.context,
-                                  ).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        'Incident reported successfully (ID: #${result['id']}).',
-                                      ),
-                                      backgroundColor: const Color(0xFF1EAA55),
-                                    ),
-                                  );
-                                } catch (error) {
-                                  setSheetState(() => isSubmitting = false);
-                                  if (!mounted) return;
-                                  ScaffoldMessenger.of(
-                                    this.context,
-                                  ).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        error is ApiException ? error.message : 'Failed to submit incident report. Please check your connection and retry.',
-                                      ),
-                                      backgroundColor: const Color(0xFFDC2626),
-                                    ),
-                                  );
-                                }
-                              },
-                        child: isSubmitting
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text(
-                                'SUBMIT INCIDENT REPORT',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'accident',
+                            child: Text('Road Accident'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'fire',
+                            child: Text('Fire / Smoke'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'fallen_tree',
+                            child: Text('Fallen Tree'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'damaged_road',
+                            child: Text('Damaged Road / Pothole'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'landslide',
+                            child: Text('Landslide / Rockfall'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'flood',
+                            child: Text('Flash Flood / Waterlogging'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'road',
+                            child: Text('Road Closure / Obstruction'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'weather',
+                            child: Text('Severe Storm / Wind'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'fog',
+                            child: Text('Dense Fog / Low Visibility'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'animal',
+                            child: Text('Wildlife Hazard'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'other',
+                            child: Text('Other Incident'),
+                          ),
+                        ],
+                        onChanged: (val) {
+                          if (val != null)
+                            setSheetState(() => hazardType = val);
+                        },
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 14),
+                      const Text(
+                        'Severity (1 = Minor, 5 = Critical)',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Slider(
+                              value: severity.toDouble(),
+                              min: 1,
+                              max: 5,
+                              divisions: 4,
+                              label: 'Severity: $severity',
+                              activeColor: severity >= 4
+                                  ? const Color(0xFFDC2626)
+                                  : const Color(0xFFFF9800),
+                              onChanged: (val) =>
+                                  setSheetState(() => severity = val.round()),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: severity >= 4
+                                  ? const Color(0xFFFFEAEA)
+                                  : const Color(0xFFFFF3E0),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'Level $severity',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: severity >= 4
+                                    ? const Color(0xFFDC2626)
+                                    : const Color(0xFFE65100),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      const Text(
+                        'Incident Description',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: nameController,
+                        decoration: InputDecoration(
+                          hintText: 'e.g. Fallen tree blocking both lanes near hairpin 3',
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        maxLines: 2,
+                      ),
+                      const SizedBox(height: 20),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF087CF0),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          onPressed: (isSubmitting || location == null)
+                              ? null
+                              : () async {
+                                  final desc = nameController.text.trim();
+                                  if (desc.length < 3) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Please enter at least 3 characters for the description.',
+                                        ),
+                                        backgroundColor: Color(0xFFDC2626),
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  setSheetState(() => isSubmitting = true);
+                                  try {
+                                    final result = await ApiService.instance
+                                        .reportTouristHazard(
+                                          description: desc,
+                                          hazardType: hazardType,
+                                          severity: severity,
+                                          latitude: location!.latitude,
+                                          longitude: location!.longitude,
+                                        );
+                                    if (ctx.mounted) Navigator.pop(ctx);
+                                    if (!mounted) return;
+                                    ScaffoldMessenger.of(
+                                      this.context,
+                                    ).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          'Incident reported successfully (ID: #${result['id']}).',
+                                        ),
+                                        backgroundColor: const Color(
+                                          0xFF1EAA55,
+                                        ),
+                                      ),
+                                    );
+                                  } catch (error) {
+                                    setSheetState(() => isSubmitting = false);
+                                    if (!mounted) return;
+                                    ScaffoldMessenger.of(this.context)
+                                        .showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              error is ApiException
+                                                  ? error.message
+                                                  : 'Failed to submit incident report. Please check your connection and retry.',
+                                            ),
+                                            backgroundColor: const Color(
+                                              0xFFDC2626,
+                                            ),
+                                          ),
+                                        );
+                                  }
+                                },
+                          child: isSubmitting
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Text(
+                                  'SUBMIT INCIDENT REPORT',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );
@@ -575,152 +613,153 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: SizedBox(
           width: 1100,
           child: RefreshIndicator(
-        onRefresh: _reloadAlerts,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const DashboardHeader(),
-              const SizedBox(height: 16),
-              TouristReportAlerts(
-                api: widget.api,
-                locate: widget.reportLocation,
-              ),
-              const Text(
-                'Your SOS activity',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1,
-                  color: Color(0xFF1A2D4F),
-                ),
-              ),
-              const SizedBox(height: 12),
-              FutureBuilder<List<Map<String, dynamic>>>(
-                future: _alertsFuture ??= (widget.api ?? ApiService.instance)
-                    .getActiveSosEvents(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting &&
-                      !snapshot.hasData) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 40),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  }
-                  if (snapshot.hasError) {
-                    return Card(
-                      color: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          children: [
-                            const Icon(
-                              Icons.error_outline,
-                              color: Color(0xFFDC2626),
-                              size: 36,
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              snapshot.error is ApiException
-                                  ? (snapshot.error as ApiException).message
-                                  : 'Could not retrieve rescue alerts. Verify connection.',
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 12),
-                            ElevatedButton(
-                              onPressed: _reloadAlerts,
-                              child: const Text('Retry'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }
-                  final events = snapshot.data ?? [];
-                  if (events.isEmpty) {
-                    return Card(
-                      color: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        side: const BorderSide(color: Color(0xFFE2E8F0)),
-                      ),
-                      child: const Padding(
-                        padding: EdgeInsets.all(24),
-                        child: Column(
-                          children: [
-                            Icon(
-                              Icons.check_circle_outline,
-                              color: Color(0xFF1EAA55),
-                              size: 48,
-                            ),
-                            SizedBox(height: 12),
-                            Text(
-                              'No SOS activity yet',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF1A2D4F),
-                              ),
-                            ),
-                            SizedBox(height: 6),
-                            Text(
-                              'Your SOS requests and status updates will appear here.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Color(0xFF64748B),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }
-                  return Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        margin: const EdgeInsets.only(bottom: 14),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFF7E8),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Row(
-                          children: [
-                            Icon(
-                              Icons.info_outline,
-                              size: 18,
-                              color: Color(0xFFB7791F),
-                            ),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'These are Tour Guard records. Public emergency services are not contacted automatically.',
-                                style: TextStyle(
-                                  fontSize: 11.5,
-                                  color: Color(0xFF7C5A22),
+            onRefresh: _reloadAlerts,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const DashboardHeader(),
+                  const SizedBox(height: 16),
+                  TouristReportAlerts(
+                    api: widget.api,
+                    locate: widget.reportLocation,
+                  ),
+                  const Text(
+                    'Your SOS activity',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1,
+                      color: Color(0xFF1A2D4F),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  FutureBuilder<List<Map<String, dynamic>>>(
+                    future: _alertsFuture ??=
+                        (widget.api ?? ApiService.instance)
+                            .getActiveSosEvents(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting &&
+                          !snapshot.hasData) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 40),
+                          child: Center(child: CircularProgressIndicator()),
+                        );
+                      }
+                      if (snapshot.hasError) {
+                        return Card(
+                          color: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              children: [
+                                const Icon(
+                                  Icons.error_outline,
+                                  color: Color(0xFFDC2626),
+                                  size: 36,
                                 ),
-                              ),
+                                const SizedBox(height: 10),
+                                Text(
+                                  snapshot.error is ApiException
+                                      ? (snapshot.error as ApiException).message
+                                      : 'Could not retrieve rescue alerts. Verify connection.',
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 12),
+                                ElevatedButton(
+                                  onPressed: _reloadAlerts,
+                                  child: const Text('Retry'),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                      ),
-                      for (final event in events)
-                        SosAlertCard(event: event),
-                    ],
-                  );
-                },
+                          ),
+                        );
+                      }
+                      final events = snapshot.data ?? [];
+                      if (events.isEmpty) {
+                        return Card(
+                          color: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            side: const BorderSide(color: Color(0xFFE2E8F0)),
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.all(24),
+                            child: Column(
+                              children: [
+                                Icon(
+                                  Icons.check_circle_outline,
+                                  color: Color(0xFF1EAA55),
+                                  size: 48,
+                                ),
+                                SizedBox(height: 12),
+                                Text(
+                                  'No SOS activity yet',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1A2D4F),
+                                  ),
+                                ),
+                                SizedBox(height: 6),
+                                Text(
+                                  'Your SOS requests and status updates will appear here.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Color(0xFF64748B),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }
+                      return Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            margin: const EdgeInsets.only(bottom: 14),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF7E8),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(
+                                  Icons.info_outline,
+                                  size: 18,
+                                  color: Color(0xFFB7791F),
+                                ),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'These are Tour Guard records. Public emergency services are not contacted automatically.',
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      color: Color(0xFF7C5A22),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          for (final event in events)
+                            SosAlertCard(event: event),
+                        ],
+                      );
+                    },
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
         ),
       ),
     );
@@ -746,14 +785,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     // 1. App Title & Notifications Header
                     const DashboardHeader(),
-                    if (_activeSos != null)
+                    if (_activeSos != null || _api.sosOperation.value != null)
                       Card(
                         color: const Color(0xFFFFF1F0),
                         child: ListTile(
                           leading: const Icon(Icons.sos, color: Colors.red),
-                          title: Text('Active SOS #${_activeSos!['id']}'),
+                          title: Text(
+                            _api.sosOperation.value ??
+                                'Active SOS #${_activeSos!['id']}',
+                          ),
                           subtitle: Text(
-                            _sosOffline
+                            _api.sosOperation.value != null
+                                ? 'Waiting for confirmation. Please keep the app connected.'
+                                : _sosOffline
                                 ? 'Updates unavailable. Last received status shown.'
                                 : switch (_activeSos!['responder_stage']) {
                                     'ASSIGNED' => 'Responder assigned. Awaiting acceptance.',
@@ -822,9 +866,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         child: NavigationBar(
           height: 72,
-          labelTextStyle: const WidgetStatePropertyAll(TextStyle(
-            fontSize: 11, fontWeight: FontWeight.w600,
-          )),
+          labelTextStyle: const WidgetStatePropertyAll(
+            TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+          ),
           selectedIndex: _currentTabIndex,
           onDestinationSelected: (int index) {
             if (index == 1) {

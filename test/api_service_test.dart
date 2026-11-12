@@ -22,6 +22,39 @@ class MemoryStore implements SessionStore {
 
 void main() {
   test(
+    'SOS status survives navigation and clears on cancellation and logout',
+    () async {
+      final store = MemoryStore()
+        ..value = jsonEncode({
+          'access_token': 'jwt',
+          'token_type': 'bearer',
+          'tourist_id': 'TG-12345678',
+        });
+      final api = ApiService(
+        store: store,
+        client: MockClient((request) async {
+          if (request.url.path.endsWith('/cancel'))
+            return http.Response('{}', 200);
+          return http.Response(
+            jsonEncode({
+              'events': [
+                {'id': 30, 'workflow_status': 'OPEN'},
+              ],
+            }),
+            200,
+          );
+        }),
+      );
+      await api.getSosHistory();
+      expect(api.cachedSosEvents.single['id'], 30);
+      expect(api.cachedSosEvents.single['workflow_status'], 'OPEN');
+      await api.cancelSos(30);
+      expect(api.cachedSosEvents.single['workflow_status'], 'CANCELLED');
+      await api.logout();
+      expect(api.cachedSosEvents, isEmpty);
+    },
+  );
+  test(
     'Signup sends name and personal phone in emergency_contact_phone',
     () async {
       final api = ApiService(

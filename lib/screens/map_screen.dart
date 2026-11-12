@@ -970,105 +970,6 @@ class _MapScreenState extends State<MapScreen>
     }
   }
 
-  // ─── 9. DEMO SCENARIO PRESETS PICKER MODAL ──────────────────────────────────
-  void _openDemoPresetsModal() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      backgroundColor: Colors.white,
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE8F3FF),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.travel_explore_rounded,
-                        color: Color(0xFF087CF0),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    const Text(
-                      'Live Demo Scenarios',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF1A2D4F),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _DemoPresetTile(
-                  title: '🌲 Ooty ➔ Pykara Waterfalls',
-                  subtitle: 'Mountain Hill Road • Landslide & Rain Assessment',
-                  onTap: () {
-                    Navigator.pop(context);
-                    _gpsRequestId++;
-                    _isLoadingGps = false;
-                    setState(() {
-                      _sourceLocation = _tourGuardDemoHub;
-                      _sourceName = 'Ooty Town';
-                      _sourceController.text = '📍 Ooty Town';
-                      _destinationLocation = const LatLng(11.4500, 76.6000);
-                      _destinationName = 'Pykara Waterfalls';
-                      _destinationController.text = 'Pykara Waterfalls';
-                    });
-                    _calculateRoute();
-                  },
-                ),
-                _DemoPresetTile(
-                  title: '⛰️ Coimbatore ➔ Ooty (Ghat Highway)',
-                  subtitle: 'Hairpin Bends (NH181) • High Elevation Slope Risk',
-                  onTap: () {
-                    Navigator.pop(context);
-                    setState(() {
-                      _sourceLocation = const LatLng(11.0168, 76.9558);
-                      _sourceName = 'Coimbatore';
-                      _sourceController.text = 'Coimbatore';
-                      _destinationLocation = _tourGuardDemoHub;
-                      _destinationName = 'Ooty Hill Station';
-                      _destinationController.text = 'Ooty Hill Station';
-                    });
-                    _calculateRoute();
-                  },
-                ),
-                _DemoPresetTile(
-                  title: '🌊 Munnar ➔ Mattupetty Dam',
-                  subtitle: 'Dense Fog & Valley Corridor Analysis',
-                  onTap: () {
-                    Navigator.pop(context);
-                    setState(() {
-                      _sourceLocation = const LatLng(10.0889, 77.0595);
-                      _sourceName = 'Munnar';
-                      _sourceController.text = 'Munnar';
-                      _destinationLocation = const LatLng(10.1062, 77.1247);
-                      _destinationName = 'Mattupetty Dam';
-                      _destinationController.text = 'Mattupetty Dam';
-                    });
-                    _calculateRoute();
-                  },
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final effectiveSource = _sourceLocation ?? _tourGuardDemoHub;
@@ -1260,10 +1161,10 @@ class _MapScreenState extends State<MapScreen>
             ],
           ),
 
-          const Positioned(
+          Positioned(
             left: 8,
-            bottom: 0,
-            child: Text(
+            bottom: MediaQuery.paddingOf(context).bottom + 4,
+            child: const Text(
               '© OpenStreetMap contributors',
               style: TextStyle(fontSize: 10, backgroundColor: Colors.white),
             ),
@@ -1480,45 +1381,14 @@ class _MapScreenState extends State<MapScreen>
             ),
           ),
 
-          // ─── 3. RIGHT SIDE CONTROLS (Demo Presets, GPS Re-center & Layers) ──
+          // ─── 3. RIGHT SIDE CONTROLS (GPS Re-center & Layers) ─────────────
           Positioned(
             right: 16,
             bottom: _routePoints.isNotEmpty
-                ? MediaQuery.sizeOf(context).height * .38 + 30
-                : 30,
+                ? MediaQuery.sizeOf(context).height * .38 + 30 + MediaQuery.paddingOf(context).bottom
+                : 30 + MediaQuery.paddingOf(context).bottom,
             child: Column(
               children: [
-                FloatingActionButton.small(
-                  heroTag: 'zoom_in',
-                  tooltip: 'Zoom in',
-                  onPressed: () => _mapController.move(
-                    _mapController.camera.center,
-                    (_mapController.camera.zoom + 1).clamp(3, 18),
-                  ),
-                  child: const Icon(Icons.add),
-                ),
-                const SizedBox(height: 10),
-                FloatingActionButton.small(
-                  heroTag: 'zoom_out',
-                  tooltip: 'Zoom out',
-                  onPressed: () => _mapController.move(
-                    _mapController.camera.center,
-                    (_mapController.camera.zoom - 1).clamp(3, 18),
-                  ),
-                  child: const Icon(Icons.remove),
-                ),
-                const SizedBox(height: 10),
-                // Demo Presets Action Button
-                FloatingActionButton.small(
-                  heroTag: 'fab_demo_presets',
-                  backgroundColor: const Color(0xFF8B5CF6),
-                  foregroundColor: Colors.white,
-                  onPressed: _openDemoPresetsModal,
-                  tooltip: 'Live Demo Scenarios',
-                  child: const Icon(Icons.travel_explore_rounded, size: 20),
-                ),
-                const SizedBox(height: 10),
-
                 // Hazard Layer Toggle
                 FloatingActionButton.small(
                   heroTag: 'fab_hazards',
@@ -1575,7 +1445,7 @@ class _MapScreenState extends State<MapScreen>
             Positioned(
               left: 16,
               right: 16,
-              bottom: 20,
+              bottom: 20 + MediaQuery.paddingOf(context).bottom,
               child: ConstrainedBox(
                 constraints: BoxConstraints(
                   maxHeight: MediaQuery.sizeOf(context).height * .38,
@@ -1617,7 +1487,7 @@ class _MapScreenState extends State<MapScreen>
             Positioned(
               left: 16,
               right: 90,
-              bottom: MediaQuery.sizeOf(context).height * .38 + 30,
+              bottom: MediaQuery.sizeOf(context).height * .38 + 30 + MediaQuery.paddingOf(context).bottom,
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: FilledButton.icon(
@@ -1638,51 +1508,6 @@ class _MapScreenState extends State<MapScreen>
               ),
             ),
         ],
-      ),
-    );
-  }
-}
-
-// ─── Demo Preset Tile Widget ─────────────────────────────────────────────────
-class _DemoPresetTile extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  const _DemoPresetTile({
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 0,
-      margin: const EdgeInsets.only(bottom: 10),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: Color(0xFFE2E8F0)),
-      ),
-      child: ListTile(
-        onTap: onTap,
-        title: Text(
-          title,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF1A2D4F),
-          ),
-        ),
-        subtitle: Text(
-          subtitle,
-          style: const TextStyle(fontSize: 12, color: Color(0xFF8A99AF)),
-        ),
-        trailing: const Icon(
-          Icons.arrow_forward_ios_rounded,
-          size: 14,
-          color: Color(0xFF087CF0),
-        ),
       ),
     );
   }
